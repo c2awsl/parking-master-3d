@@ -405,8 +405,12 @@ const rG = new THREE.Mesh(wG, gMat); rG.position.set(0,0.7,-1.4); rG.rotation.x=
 const hlMat = new THREE.MeshStandardMaterial({ color:0xffffaa, emissive:0xffff00, emissiveIntensity:0.5 });
 const tlMat = new THREE.MeshStandardMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:0.3 });
 [-0.7,0.7].forEach(x => {
-    carG.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),hlMat),{position:new THREE.Vector3(x,0.1,2.01)}));
-    carG.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),tlMat),{position:new THREE.Vector3(x,0.1,-2.01)}));
+    const hm = new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),hlMat);
+    hm.position.set(x,0.1,2.01);
+    carG.add(hm);
+    const tm = new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),tlMat);
+    tm.position.set(x,0.1,-2.01);
+    carG.add(tm);
 });
 scene.add(carG);
 
