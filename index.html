@@ -23,11 +23,56 @@
             border-radius: 6px;
         }
         #physics-info {
-            position: absolute; bottom: 16px; left: 16px;
+            position: absolute; bottom: 60px; left: 16px;
             color: #ff0; font-family: 'Consolas', monospace;
             font-size: 12px; pointer-events: none;
             background: rgba(0,0,0,0.6); padding: 6px 10px;
             border-radius: 6px;
+        }
+
+        /* ==========================================
+           方向盘 UI 容器
+           ========================================== */
+        #steering-wrapper {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 180px;
+            height: 220px;
+            pointer-events: none;           /* 容器本身不拦截事件 */
+            user-select: none;
+        }
+
+        /* 方向盘标题 */
+        #steering-label {
+            text-align: center;
+            color: #aaa;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            margin-bottom: 4px;
+            pointer-events: none;
+        }
+
+        /* 方向盘画布 — 接收鼠标事件 */
+        #steering-canvas {
+            display: block;
+            margin: 0 auto;
+            cursor: grab;
+            pointer-events: auto;           /* 仅画布拦截 */
+            border-radius: 50%;
+        }
+        #steering-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* 角度数值显示 */
+        #steering-angle {
+            text-align: center;
+            color: #0ff;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            margin-top: 4px;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -36,12 +81,19 @@
 <div id="hud">
     &#x1F697; 物理停车场模拟器 (Cannon-es)<br>
     W - 加速 &nbsp; S - 刹车/倒车<br>
-    A - 左转 &nbsp; D - 右转<br>
-    空格 - 手刹 &nbsp; PageUp/Down - 视距
+    空格 - 手刹 &nbsp; PageUp/Down - 视距<br>
+    <span style="color:#0ff">鼠标拖拽方向盘或键盘 A/D 转向</span>
 </div>
 
-<div id="speed">速度: 0 km/h</div>
+<div id="speed">0 km/h</div>
 <div id="physics-info">加载中...</div>
+
+<!-- 方向盘 UI -->
+<div id="steering-wrapper">
+    <div id="steering-label">STEERING</div>
+    <canvas id="steering-canvas" width="180" height="180"></canvas>
+    <div id="steering-angle">0.0 deg</div>
+</div>
 
 <script type="importmap">
 {
@@ -109,33 +161,19 @@ const world = new CANNON.World({
     allowSleep: true,
 });
 
-// 默认碰撞参数
 const defaultContactMaterial = new CANNON.ContactMaterial(
     new CANNON.Material('default'),
     new CANNON.Material('default'),
-    {
-        friction: 0.3,
-        restitution: 0.2,
-        contactEquationStiffness: 1e8,
-        contactEquationRelaxation: 3,
-    }
+    { friction: 0.3, restitution: 0.2, contactEquationStiffness: 1e8, contactEquationRelaxation: 3 }
 );
 world.defaultContactMaterial = defaultContactMaterial;
 
-// 地面材质
 const groundMaterial = new CANNON.Material('ground');
-// 轮胎材质
 const wheelMaterial = new CANNON.Material('wheel');
 
-// 轮胎与地面接触参数
 const wheelGroundContact = new CANNON.ContactMaterial(
     wheelMaterial, groundMaterial,
-    {
-        friction: 0.45,
-        restitution: 0.0,
-        contactEquationStiffness: 1e8,
-        contactEquationRelaxation: 3,
-    }
+    { friction: 0.45, restitution: 0.0, contactEquationStiffness: 1e8, contactEquationRelaxation: 3 }
 );
 world.addContactMaterial(wheelGroundContact);
 
@@ -153,9 +191,7 @@ world.addBody(groundBody);
 
 // Three.js 地面
 const groundGeo = new THREE.PlaneGeometry(200, 200);
-const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x555555, roughness: 0.9, metalness: 0.0
-});
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.0 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -169,11 +205,9 @@ scene.add(gridHelper);
 // 五、停车场元素
 // =============================================
 
-// 停车位标线
 function createParkingLines() {
     const group = new THREE.Group();
     const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-
     for (let row = 0; row < 2; row++) {
         const zBase = row === 0 ? -8 : 8;
         const dir = row === 0 ? -1 : 1;
@@ -194,33 +228,18 @@ function createParkingLines() {
 }
 createParkingLines();
 
-// 路桩（带碰撞体）
 function createBollards() {
     const mat = new THREE.MeshStandardMaterial({ color: 0xCC0000, roughness: 0.6 });
-    const positions = [
-        [-25, -15], [-25, -11], [-25, 11], [-25, 15],
-        [25, -15], [25, -11], [25, 11], [25, 15],
-    ];
-    positions.forEach(([x, z]) => {
-        const mesh = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8), mat
-        );
-        mesh.position.set(x, 0.6, z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+    [[-25,-15],[-25,-11],[-25,11],[-25,15],[25,-15],[25,-11],[25,11],[25,15]].forEach(([x, z]) => {
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8), mat);
+        mesh.position.set(x, 0.6, z); mesh.castShadow = true; mesh.receiveShadow = true;
         scene.add(mesh);
-
-        const body = new CANNON.Body({
-            mass: 0,
-            shape: new CANNON.Cylinder(0.2, 0.25, 1.2, 8),
-            position: new CANNON.Vec3(x, 0.6, z),
-        });
+        const body = new CANNON.Body({ mass: 0, shape: new CANNON.Cylinder(0.2, 0.25, 1.2, 8), position: new CANNON.Vec3(x, 0.6, z) });
         world.addBody(body);
     });
 }
 createBollards();
 
-// 建筑物（带碰撞体）
 function createBuildings() {
     const configs = [
         { x: -35, z: 0, w: 15, h: 12, d: 15, color: 0x8899AA },
@@ -228,22 +247,14 @@ function createBuildings() {
         { x: 0, z: -30, w: 60, h: 10, d: 8, color: 0x778899 },
         { x: 0, z: 30, w: 60, h: 14, d: 8, color: 0x889988 },
     ];
-
     configs.forEach(({ x, z, w, h, d, color }) => {
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(w, h, d),
             new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.1 })
         );
-        mesh.position.set(x, h / 2, z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        mesh.position.set(x, h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true;
         scene.add(mesh);
-
-        const body = new CANNON.Body({
-            mass: 0,
-            shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)),
-            position: new CANNON.Vec3(x, h / 2, z),
-        });
+        const body = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) });
         world.addBody(body);
     });
 }
@@ -253,42 +264,38 @@ createBuildings();
 // 六、Cannon-es RaycastVehicle 车辆
 // =============================================
 
-// 车辆配置参数
 const VEHICLE_CFG = {
-    wheelRadius: 0.3,            // 车轮半径
-    suspensionStiffness: 30,     // 悬挂弹簧刚度
-    suspensionRestLength: 0.2,   // 悬挂静止长度（行程）
-    dampingRelaxation: 2.3,      // 回弹阻尼
-    dampingCompression: 4.4,     // 压缩阻尼
-    maxSuspensionForce: 100000,  // 悬挂最大力
-    maxSuspensionTravel: 0.2,    // 悬挂最大行程
-    rollInfluence: 0.01,         // 侧倾影响
-    maxSteerAngle: 0.6,          // 最大转向角（弧度）
-    engineForce: 600,            // 引擎力
-    brakeForce: 50,              // 刹车力
+    wheelRadius: 0.3,
+    suspensionStiffness: 30,
+    suspensionRestLength: 0.2,
+    dampingRelaxation: 2.3,
+    dampingCompression: 4.4,
+    maxSuspensionForce: 100000,
+    maxSuspensionTravel: 0.2,
+    rollInfluence: 0.01,
+    maxSteerAngle: 0.6,
+    engineForce: 600,
+    brakeForce: 50,
 };
 
-// 创建车身刚体（Box 形状）
 const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.35, 2));
 const chassisBody = new CANNON.Body({
-    mass: 150,  // 车身质量 150kg
+    mass: 150,
     shape: chassisShape,
     position: new CANNON.Vec3(0, VEHICLE_CFG.wheelRadius + VEHICLE_CFG.suspensionRestLength + 0.35, 0),
 });
 world.addBody(chassisBody);
 
-// 创建 RaycastVehicle
 const vehicle = new CANNON.RaycastVehicle({
-    chassisBody: chassisBody,
-    indexRightAxis: 0,      // x 轴为右侧
-    indexUpAxis: 1,         // y 轴为上方
-    indexForwardAxis: 2,    // z 轴为前方
+    chassisBody,
+    indexRightAxis: 0,
+    indexUpAxis: 1,
+    indexForwardAxis: 2,
 });
 
-// 定义四个车轮的连接点和属性
 const wheelOptions = {
     radius: VEHICLE_CFG.wheelRadius,
-    directionLocal: new CANNON.Vec3(0, -1, 0),      // 悬挂方向（向下）
+    directionLocal: new CANNON.Vec3(0, -1, 0),
     suspensionStiffness: VEHICLE_CFG.suspensionStiffness,
     suspensionRestLength: VEHICLE_CFG.suspensionRestLength,
     maxSuspensionTravel: VEHICLE_CFG.maxSuspensionTravel,
@@ -296,31 +303,26 @@ const wheelOptions = {
     dampingCompression: VEHICLE_CFG.dampingCompression,
     maxSuspensionForce: VEHICLE_CFG.maxSuspensionForce,
     rollInfluence: VEHICLE_CFG.rollInfluence,
-    axleLocal: new CANNON.Vec3(-1, 0, 0),           // 车轴方向（X轴）
-    chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0), // 下面逐个设置
-    customSlidingRotationalSpeed: -30,               // 车轮自然滑转速度
+    axleLocal: new CANNON.Vec3(-1, 0, 0),
+    chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
+    customSlidingRotationalSpeed: -30,
     useCustomSlidingRotationalSpeed: true,
 };
 
-// 四个车轮的连接点（相对于车身中心）
 const wheelPositions = [
-    new CANNON.Vec3(-1.0, 0, 1.4),    // 左前轮
-    new CANNON.Vec3(1.0, 0, 1.4),     // 右前轮
-    new CANNON.Vec3(-1.0, 0, -1.4),   // 左后轮
-    new CANNON.Vec3(1.0, 0, -1.4),    // 右后轮
+    new CANNON.Vec3(-1.0, 0, 1.4),
+    new CANNON.Vec3(1.0, 0, 1.4),
+    new CANNON.Vec3(-1.0, 0, -1.4),
+    new CANNON.Vec3(1.0, 0, -1.4),
 ];
 
-// 前两轮可转向，后两轮为驱动轮
-const steerIndex = [0, 1];  // 前轮索引
-const driveIndex = [2, 3];  // 后轮索引
+const steerIndex = [0, 1];
+const driveIndex = [2, 3];
 
 wheelPositions.forEach((pos) => {
-    const options = { ...wheelOptions };
-    options.chassisConnectionPointLocal = pos;
+    const options = { ...wheelOptions, chassisConnectionPointLocal: pos };
     vehicle.addWheel(options);
 });
-
-// 将车辆添加到物理世界（每个车轮会创建一个 CANNON.RaycastVehicleWheelInfo）
 vehicle.addToWorld(world);
 
 // =============================================
@@ -329,88 +331,52 @@ vehicle.addToWorld(world);
 
 const carGroup = new THREE.Group();
 
-// 车身底盘
 const bodyGeo = new THREE.BoxGeometry(2, 0.7, 4);
-const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0x1a5276, roughness: 0.3, metalness: 0.6
-});
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1a5276, roughness: 0.3, metalness: 0.6 });
 const chassisMesh = new THREE.Mesh(bodyGeo, bodyMat);
 chassisMesh.castShadow = true;
 carGroup.add(chassisMesh);
 
-// 车厢
 const cabinGeo = new THREE.BoxGeometry(1.8, 0.6, 2.2);
-const cabinMat = new THREE.MeshStandardMaterial({
-    color: 0x2980b9, roughness: 0.2, metalness: 0.7
-});
+const cabinMat = new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.2, metalness: 0.7 });
 const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
 cabinMesh.position.set(0, 0.65, -0.3);
 cabinMesh.castShadow = true;
 carGroup.add(cabinMesh);
 
-// 挡风玻璃
 const glassMat = new THREE.MeshStandardMaterial({
-    color: 0xaaddff, transparent: true, opacity: 0.5,
-    roughness: 0.1, metalness: 0.8
+    color: 0xaaddff, transparent: true, opacity: 0.5, roughness: 0.1, metalness: 0.8
 });
 const windshieldGeo = new THREE.BoxGeometry(1.6, 0.5, 0.05);
-
 const frontGlass = new THREE.Mesh(windshieldGeo, glassMat);
-frontGlass.position.set(0, 0.7, 0.75);
-frontGlass.rotation.x = 0.3;
+frontGlass.position.set(0, 0.7, 0.75); frontGlass.rotation.x = 0.3;
 carGroup.add(frontGlass);
-
 const rearGlass = new THREE.Mesh(windshieldGeo, glassMat);
-rearGlass.position.set(0, 0.7, -1.4);
-rearGlass.rotation.x = -0.3;
+rearGlass.position.set(0, 0.7, -1.4); rearGlass.rotation.x = -0.3;
 carGroup.add(rearGlass);
 
-// 车灯
-const headlightMat = new THREE.MeshStandardMaterial({
-    color: 0xffffaa, emissive: 0xffff00, emissiveIntensity: 0.5
-});
-const taillightMat = new THREE.MeshStandardMaterial({
-    color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3
-});
+const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffff00, emissiveIntensity: 0.5 });
+const taillightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 });
 [-0.7, 0.7].forEach(x => {
-    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), headlightMat);
-    hl.position.set(x, 0.1, 2.01);
-    carGroup.add(hl);
-
-    const tl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), taillightMat);
-    tl.position.set(x, 0.1, -2.01);
-    carGroup.add(tl);
+    carGroup.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), headlightMat), { position: new THREE.Vector3(x, 0.1, 2.01) }));
+    carGroup.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), taillightMat), { position: new THREE.Vector3(x, 0.1, -2.01) }));
 });
 
 scene.add(carGroup);
 
-// 四个车轮的 Three.js 视觉模型
+// 四个车轮视觉模型
 const wheelMeshes = [];
 const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8, metalness: 0.3 });
 const hubMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 });
 
 for (let i = 0; i < 4; i++) {
-    const wheelGroup = new THREE.Group();
-
-    // 轮胎（圆柱体）
-    const tire = new THREE.Mesh(
-        new THREE.CylinderGeometry(VEHICLE_CFG.wheelRadius, VEHICLE_CFG.wheelRadius, 0.25, 16),
-        wheelMat
-    );
-    tire.rotation.z = Math.PI / 2;
-    tire.castShadow = true;
-    wheelGroup.add(tire);
-
-    // 轮毂
-    const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.18, 0.18, 0.26, 6),
-        hubMat
-    );
-    hub.rotation.z = Math.PI / 2;
-    wheelGroup.add(hub);
-
-    scene.add(wheelGroup);
-    wheelMeshes.push(wheelGroup);
+    const wg = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(VEHICLE_CFG.wheelRadius, VEHICLE_CFG.wheelRadius, 0.25, 16), wheelMat);
+    tire.rotation.z = Math.PI / 2; tire.castShadow = true; wg.add(tire);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 6), hubMat);
+    hub.rotation.z = Math.PI / 2; wg.add(hub);
+    scene.add(wg);
+    wheelMeshes.push(wg);
 }
 
 // =============================================
@@ -430,7 +396,264 @@ window.addEventListener('keyup', (e) => {
 });
 
 // =============================================
-// 九、第三人称相机
+// 九、可拖拽方向盘 UI（Canvas 2D）
+// =============================================
+
+/**
+ * SteeringWheel 类
+ * - 在 Canvas 上绘制方向盘
+ * - 支持鼠标拖拽旋转（最大 ±270°）
+ * - 释放后自动回弹到中位
+ * - 输出 angle（度）和归一化值 [-1, 1]
+ */
+class SteeringWheel {
+    constructor(canvasId, angleDisplayId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.angleDisplay = document.getElementById(angleDisplayId);
+
+        this.size = this.canvas.width;              // 画布尺寸（正方形）
+        this.cx = this.size / 2;                     // 圆心 X
+        this.cy = this.size / 2;                     // 圆心 Y
+        this.outerR = this.size / 2 - 8;             // 方向盘外圈半径
+        this.innerR = this.outerR * 0.55;            // 内圈辐条区域半径
+        this.gripWidth = 14;                         // 握圈宽度
+
+        // ---- 旋转状态 ----
+        this.currentAngle = 0;                       // 当前旋转角度（度），范围 [-270, 270]
+        this.maxAngle = 270;                         // 最大旋转角度
+        this.isDragging = false;                     // 是否正在拖拽
+        this.dragStartAngle = 0;                     // 拖拽起始角度（相对于圆心）
+        this.dragStartRotation = 0;                  // 拖拽起始时方向盘旋转角度
+
+        // ---- 回弹弹簧 ----
+        this.springEnabled = false;                  // 释放后启用回弹
+        this.springVelocity = 0;                     // 回弹速度
+
+        this._bindEvents();
+    }
+
+    /** 绑定鼠标 / 触摸事件 */
+    _bindEvents() {
+        const c = this.canvas;
+
+        c.addEventListener('mousedown', (e) => this._onPointerDown(e));
+        window.addEventListener('mousemove', (e) => this._onPointerMove(e));
+        window.addEventListener('mouseup',   (e) => this._onPointerUp(e));
+
+        c.addEventListener('touchstart', (e) => { e.preventDefault(); this._onPointerDown(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchmove', (e) => { if (this.isDragging) this._onPointerMove(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchend',  (e) => this._onPointerUp(e));
+    }
+
+    /** 计算指针相对于圆心的角度（度） */
+    _getPointerAngle(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const px = e.clientX - rect.left - this.cx;
+        const py = e.clientY - rect.top - this.cy;
+        return Math.atan2(py, px) * (180 / Math.PI);   // 范围 (-180, 180]
+    }
+
+    _onPointerDown(e) {
+        // 检测点击位置是否在方向盘区域内
+        const rect = this.canvas.getBoundingClientRect();
+        const px = e.clientX - rect.left - this.cx;
+        const py = e.clientY - rect.top - this.cy;
+        const dist = Math.sqrt(px * px + py * py);
+        if (dist > this.outerR + 20) return;           // 点击太远则忽略
+
+        this.isDragging = true;
+        this.springEnabled = false;
+        this.springVelocity = 0;
+        this.dragStartAngle = this._getPointerAngle(e);
+        this.dragStartRotation = this.currentAngle;
+    }
+
+    _onPointerMove(e) {
+        if (!this.isDragging) return;
+
+        const pointerAngle = this._getPointerAngle(e);
+        // 计算拖拽角度差（处理跨越 ±180° 的跳变）
+        let delta = pointerAngle - this.dragStartAngle;
+        if (delta > 180)  delta -= 360;
+        if (delta < -180) delta += 360;
+
+        // 限制在 ±maxAngle 范围
+        this.currentAngle = THREE.MathUtils.clamp(
+            this.dragStartRotation + delta,
+            -this.maxAngle,
+            this.maxAngle
+        );
+    }
+
+    _onPointerUp() {
+        if (!this.isDragging) return;
+        this.isDragging = false;
+        this.springEnabled = true;                     // 启用回弹
+    }
+
+    /** 每帧更新（回弹动画） */
+    update(dt) {
+        if (this.springEnabled && !this.isDragging) {
+            // 弹簧阻尼回弹：力 = -stiffness * angle - damping * velocity
+            const stiffness = 12;                      // 弹簧刚度
+            const damping = 6;                         // 阻尼系数
+            const force = -stiffness * this.currentAngle - damping * this.springVelocity;
+            this.springVelocity += force * dt;
+            this.currentAngle += this.springVelocity * dt;
+
+            // 接近中位时归零
+            if (Math.abs(this.currentAngle) < 0.3 && Math.abs(this.springVelocity) < 1) {
+                this.currentAngle = 0;
+                this.springVelocity = 0;
+                this.springEnabled = false;
+            }
+        }
+
+        // 更新角度显示
+        if (this.angleDisplay) {
+            this.angleDisplay.textContent = `${this.currentAngle.toFixed(1)} deg`;
+        }
+    }
+
+    /** 获取归一化转向值 [-1, 1]，用于映射到物理转向角 */
+    getSteerNormalized() {
+        return this.currentAngle / this.maxAngle;      // -1 = 左满舵, +1 = 右满舵
+    }
+
+    /** 绘制方向盘（每帧调用） */
+    draw() {
+        const ctx = this.ctx;
+        const cx = this.cx;
+        const cy = this.cy;
+        const R = this.outerR;
+
+        ctx.clearRect(0, 0, this.size, this.size);
+
+        // ---- 背景刻度弧（左右各 270° 的弧形轨道）----
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        // 背景弧线：从 -270° 到 +270°（起始角 = -90° - 270° = -360°，结束角 = -90° + 270° = 180°）
+        // 实际画弧范围：120° 到 420°（即 -240° 到 60°，换算后）
+        // 简化：从 210° (底部左侧) 顺时针到 330° (底部右侧) = 从 +210° 到 +150°（跨底部）
+        const arcStart = Math.PI * 0.75;   // 135°
+        const arcEnd   = Math.PI * 2.25;   // 405° = 45°
+
+        // 背景弧（深灰）
+        ctx.beginPath();
+        ctx.arc(0, 0, R + 3, arcStart, arcEnd);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        // 当前旋转位置指示弧（青色）
+        const normalized = this.currentAngle / this.maxAngle;  // -1 ~ +1
+        const indicatorEnd = arcStart + normalized * (arcEnd - arcStart) / 2 + (arcEnd - arcStart) / 2;
+        const arcMid = (arcStart + arcEnd) / 2;
+        if (Math.abs(this.currentAngle) > 0.5) {
+            ctx.beginPath();
+            ctx.arc(0, 0, R + 3,
+                normalized < 0 ? indicatorEnd : arcMid,
+                normalized < 0 ? arcMid : indicatorEnd
+            );
+            ctx.strokeStyle = normalized < 0 ? '#ff6644' : '#44ff66';  // 左红右绿
+            ctx.lineWidth = 6;
+            ctx.stroke();
+        }
+
+        // 刻度线（每 30° 一条）
+        for (let deg = -this.maxAngle; deg <= this.maxAngle; deg += 30) {
+            const rad = (deg - 90) * Math.PI / 180;       // 0° 在顶部
+            const isMajor = deg % 90 === 0;
+            const len = isMajor ? 10 : 5;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(rad) * (R - len), Math.sin(rad) * (R - len));
+            ctx.lineTo(Math.cos(rad) * R, Math.sin(rad) * R);
+            ctx.strokeStyle = isMajor ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = isMajor ? 2 : 1;
+            ctx.stroke();
+        }
+
+        // ---- 方向盘主体（跟随旋转）----
+        ctx.save();
+        ctx.rotate(this.currentAngle * Math.PI / 180);
+
+        // 外圈（握把）
+        ctx.beginPath();
+        ctx.arc(0, 0, R, 0, Math.PI * 2);
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = this.gripWidth;
+        ctx.stroke();
+
+        // 外圈高光
+        ctx.beginPath();
+        ctx.arc(0, 0, R, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = this.gripWidth - 4;
+        ctx.stroke();
+
+        // 三条辐条（顶部居中、左下、右下）
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+
+        // 顶部辐条（12 点方向）
+        ctx.beginPath();
+        ctx.moveTo(0, -R + this.gripWidth / 2);
+        ctx.lineTo(0, -this.innerR);
+        ctx.strokeStyle = '#666';
+        ctx.stroke();
+
+        // 左下辐条（8 点方向，约 240°）
+        const blAngle = 240 * Math.PI / 180;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(blAngle) * (R - this.gripWidth / 2), Math.sin(blAngle) * (R - this.gripWidth / 2));
+        ctx.lineTo(Math.cos(blAngle) * this.innerR, Math.sin(blAngle) * this.innerR);
+        ctx.strokeStyle = '#666';
+        ctx.stroke();
+
+        // 右下辐条（4 点方向，约 300°）
+        const brAngle = 300 * Math.PI / 180;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(brAngle) * (R - this.gripWidth / 2), Math.sin(brAngle) * (R - this.gripWidth / 2));
+        ctx.lineTo(Math.cos(brAngle) * this.innerR, Math.sin(brAngle) * this.innerR);
+        ctx.strokeStyle = '#666';
+        ctx.stroke();
+
+        // 中心圆盘
+        const hubGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.innerR * 0.6);
+        hubGrad.addColorStop(0, '#888');
+        hubGrad.addColorStop(1, '#444');
+        ctx.beginPath();
+        ctx.arc(0, 0, this.innerR * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = hubGrad;
+        ctx.fill();
+
+        // 中心标志（小圆）
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#aaa';
+        ctx.fill();
+
+        // ---- 标记点（红色三角，指示 12 点位置）----
+        ctx.beginPath();
+        ctx.moveTo(0, -R + this.gripWidth + 4);
+        ctx.lineTo(-6, -R + this.gripWidth + 16);
+        ctx.lineTo(6, -R + this.gripWidth + 16);
+        ctx.closePath();
+        ctx.fillStyle = '#ff3333';
+        ctx.fill();
+
+        ctx.restore(); // 恢复方向盘旋转
+        ctx.restore(); // 恢复 translate
+    }
+}
+
+// 创建方向盘实例
+const steeringWheel = new SteeringWheel('steering-canvas', 'steering-angle');
+
+// =============================================
+// 十、第三人称相机
 // =============================================
 
 const camTarget = {
@@ -443,7 +666,7 @@ const camTarget = {
 };
 
 // =============================================
-// 十、窗口自适应
+// 十一、窗口自适应
 // =============================================
 
 window.addEventListener('resize', () => {
@@ -453,10 +676,9 @@ window.addEventListener('resize', () => {
 });
 
 // =============================================
-// 十一、物理调试辅助体（可选，展示物理碰撞形状）
+// 十二、悬挂调试辅助线
 // =============================================
 
-// 可视化悬挂射线（用细长圆柱表示每个车轮的悬挂方向）
 const suspensionHelpers = [];
 for (let i = 0; i < 4; i++) {
     const geo = new THREE.CylinderGeometry(0.02, 0.02, 1, 4);
@@ -467,7 +689,7 @@ for (let i = 0; i < 4; i++) {
 }
 
 // =============================================
-// 十二、游戏主循环
+// 十三、游戏主循环
 // =============================================
 
 const clock = new THREE.Clock();
@@ -478,146 +700,90 @@ function animate() {
 
     const dt = Math.min(clock.getDelta(), 0.05);
 
-    // ---- 键盘输入处理 ----
+    // ---- 更新方向盘 UI ----
+    steeringWheel.update(dt);
+    steeringWheel.draw();
 
+    // ---- 获取转向输入 ----
+    // 优先使用方向盘拖拽输入，键盘 A/D 作为备选
+    let steerInput = steeringWheel.getSteerNormalized();  // 范围 [-1, 1]
+
+    // 如果键盘 A/D 按下，覆盖方向盘输入
+    if (keys.has('a')) steerInput = 1;     // 左满舵
+    if (keys.has('d')) steerInput = -1;    // 右满舵
+
+    // 将归一化转向值映射到物理转向角（弧度）
+    const steerValue = steerInput * VEHICLE_CFG.maxSteerAngle;
+
+    // ---- 引擎力 ----
     let engineForce = 0;
-    let steerValue = 0;
-
-    // W — 加速前进
-    if (keys.has('w')) {
-        engineForce = VEHICLE_CFG.engineForce;
-    }
-    // S — 倒车/减速
-    if (keys.has('s')) {
-        engineForce = -VEHICLE_CFG.engineForce * 0.5;
-    }
-    // A — 左转
-    if (keys.has('a')) {
-        steerValue = VEHICLE_CFG.maxSteerAngle;
-    }
-    // D — 右转
-    if (keys.has('d')) {
-        steerValue = -VEHICLE_CFG.maxSteerAngle;
-    }
-
-    // 松开 A/D 时，转向角平滑回正（物理世界会自动归零，无需额外处理）
+    if (keys.has('w')) engineForce = VEHICLE_CFG.engineForce;
+    if (keys.has('s')) engineForce = -VEHICLE_CFG.engineForce * 0.5;
 
     // ---- 应用力到物理车轮 ----
+    driveIndex.forEach(i => vehicle.applyEngineForce(engineForce, i));
+    steerIndex.forEach(i => vehicle.setSteeringValue(steerValue, i));
 
-    // 后轮为驱动轮，施加引擎力
-    driveIndex.forEach(i => {
-        vehicle.applyEngineForce(engineForce, i);
-    });
-
-    // 前轮为转向轮，施加转向角
-    steerIndex.forEach(i => {
-        vehicle.setSteeringValue(steerValue, i);
-    });
-
-    // 手刹：对所有车轮施加刹车力
-    if (isBraking) {
-        for (let i = 0; i < 4; i++) {
-            vehicle.setBrake(VEHICLE_CFG.brakeForce, i);
-        }
-    } else {
-        for (let i = 0; i < 4; i++) {
-            vehicle.setBrake(0, i);
-        }
+    // 手刹
+    for (let i = 0; i < 4; i++) {
+        vehicle.setBrake(isBraking ? VEHICLE_CFG.brakeForce : 0, i);
     }
 
     // ---- 物理世界步进 ----
-    // 固定时间步进，保证物理稳定性
     world.step(1 / 60, dt, 3);
     physSteps++;
 
     // ---- 同步 Three.js 视觉模型与物理刚体 ----
-
-    // 车身同步：将物理车身的位置和旋转复制到 Three.js 车身
     carGroup.position.copy(chassisBody.position);
     carGroup.quaternion.copy(chassisBody.quaternion);
 
-    // 四个车轮同步
     for (let i = 0; i < 4; i++) {
-        const wheelInfo = vehicle.wheelInfos[i];
-
-        // 从物理世界获取车轮的世界变换矩阵
-        const t = wheelInfo.worldTransform;
-
-        // 车轮视觉模型位置 = 物理世界计算的位置
+        const t = vehicle.wheelInfos[i].worldTransform;
         wheelMeshes[i].position.set(t.position.x, t.position.y, t.position.z);
-        // 车轮视觉模型旋转 = 物理世界计算的旋转
-        wheelMeshes[i].quaternion.set(
-            t.quaternion.x, t.quaternion.y,
-            t.quaternion.z, t.quaternion.w
-        );
+        wheelMeshes[i].quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
 
-        // 更新悬挂辅助线（从连接点到车轮中心的红线）
-        const connPoint = new THREE.Vector3(
-            chassisBody.position.x + wheelInfo.chassisConnectionPointLocal.x,
-            chassisBody.position.y + wheelInfo.chassisConnectionPointLocal.y,
-            chassisBody.position.z + wheelInfo.chassisConnectionPointLocal.z,
-        );
-        // 将连接点变换到车身世界空间
-        const localConn = new THREE.Vector3().copy(wheelInfo.chassisConnectionPointLocal);
+        // 悬挂辅助线
+        const info = vehicle.wheelInfos[i];
+        const localConn = new THREE.Vector3().copy(info.chassisConnectionPointLocal);
         localConn.applyQuaternion(new THREE.Quaternion(
             chassisBody.quaternion.x, chassisBody.quaternion.y,
             chassisBody.quaternion.z, chassisBody.quaternion.w
         ));
         const worldConn = new THREE.Vector3().copy(chassisBody.position).add(localConn);
 
-        suspensionHelpers[i].position.copy(worldConn).lerp(
-            wheelMeshes[i].position, 0.5
-        );
+        suspensionHelpers[i].position.copy(worldConn).lerp(wheelMeshes[i].position, 0.5);
         suspensionHelpers[i].lookAt(wheelMeshes[i].position);
         suspensionHelpers[i].rotateX(Math.PI / 2);
-        const suspLen = worldConn.distanceTo(wheelMeshes[i].position);
-        suspensionHelpers[i].scale.y = Math.max(suspLen, 0.01);
+        suspensionHelpers[i].scale.y = Math.max(worldConn.distanceTo(wheelMeshes[i].position), 0.01);
     }
 
     // ---- 相机跟随 ----
     const bodyPos = chassisBody.position;
     const bodyQuat = chassisBody.quaternion;
 
-    // 理想相机位置：在车身后方
     const idealOffset = new THREE.Vector3(0, camTarget.height, -camTarget.distance);
-    idealOffset.applyQuaternion(new THREE.Quaternion(
-        bodyQuat.x, bodyQuat.y, bodyQuat.z, bodyQuat.w
-    ));
+    idealOffset.applyQuaternion(new THREE.Quaternion(bodyQuat.x, bodyQuat.y, bodyQuat.z, bodyQuat.w));
     idealOffset.add(new THREE.Vector3(bodyPos.x, bodyPos.y, bodyPos.z));
 
-    // 理想观察点：车身中心上方
     const idealLookAt = new THREE.Vector3(bodyPos.x, bodyPos.y + 1.5, bodyPos.z);
 
-    // 平滑插值
     camTarget.currentPos.lerp(idealOffset, 0.08);
     camTarget.currentLookAt.lerp(idealLookAt, 0.08);
 
     camera.position.copy(camTarget.currentPos);
     camera.lookAt(camTarget.currentLookAt);
 
-    // 视距调节
-    if (keys.has('pageup')) {
-        camTarget.distance = THREE.MathUtils.clamp(
-            camTarget.distance - 5 * dt, camTarget.minDistance, camTarget.maxDistance
-        );
-    }
-    if (keys.has('pagedown')) {
-        camTarget.distance = THREE.MathUtils.clamp(
-            camTarget.distance + 5 * dt, camTarget.minDistance, camTarget.maxDistance
-        );
-    }
+    if (keys.has('pageup'))  camTarget.distance = THREE.MathUtils.clamp(camTarget.distance - 5 * dt, camTarget.minDistance, camTarget.maxDistance);
+    if (keys.has('pagedown')) camTarget.distance = THREE.MathUtils.clamp(camTarget.distance + 5 * dt, camTarget.minDistance, camTarget.maxDistance);
 
     // ---- HUD 更新 ----
-    // 速度 = 车身线速度的水平分量
     const vel = chassisBody.velocity;
     const speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
-    const displaySpeed = Math.round(speed * 3.6); // m/s -> km/h
-    document.getElementById('speed').textContent = displaySpeed + ' km/h';
+    document.getElementById('speed').textContent = Math.round(speed * 3.6) + ' km/h';
 
-    // 物理信息
     const pos = chassisBody.position;
     document.getElementById('physics-info').textContent =
-        `pos: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | phys_steps: ${physSteps}`;
+        `pos: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | steer: ${steerInput.toFixed(2)}`;
 
     renderer.render(scene, camera);
 }
