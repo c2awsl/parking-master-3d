@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js + Cannon-es 物理停车场模拟器</title>
+    <title>Three.js + Cannon-es 倒车入库模拟器</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { overflow: hidden; background: #000; }
@@ -29,72 +29,137 @@
             background: rgba(0,0,0,0.6); padding: 6px 10px;
             border-radius: 6px;
         }
-
-        /* ==========================================
-           方向盘 UI 容器
-           ========================================== */
         #steering-wrapper {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 180px;
-            height: 220px;
-            pointer-events: none;           /* 容器本身不拦截事件 */
-            user-select: none;
+            position: absolute; bottom: 20px; left: 20px;
+            width: 180px; height: 220px;
+            pointer-events: none; user-select: none;
         }
-
-        /* 方向盘标题 */
         #steering-label {
-            text-align: center;
-            color: #aaa;
+            text-align: center; color: #aaa;
             font-family: 'Consolas', monospace;
-            font-size: 11px;
-            margin-bottom: 4px;
-            pointer-events: none;
+            font-size: 11px; margin-bottom: 4px; pointer-events: none;
         }
-
-        /* 方向盘画布 — 接收鼠标事件 */
         #steering-canvas {
-            display: block;
-            margin: 0 auto;
-            cursor: grab;
-            pointer-events: auto;           /* 仅画布拦截 */
-            border-radius: 50%;
+            display: block; margin: 0 auto;
+            cursor: grab; pointer-events: auto; border-radius: 50%;
         }
-        #steering-canvas:active {
-            cursor: grabbing;
-        }
-
-        /* 角度数值显示 */
+        #steering-canvas:active { cursor: grabbing; }
         #steering-angle {
-            text-align: center;
-            color: #0ff;
+            text-align: center; color: #0ff;
             font-family: 'Consolas', monospace;
-            font-size: 12px;
-            margin-top: 4px;
+            font-size: 12px; margin-top: 4px; pointer-events: none;
+        }
+        #gear-display {
+            position: absolute; bottom: 16px; left: 50%;
+            transform: translateX(-50%); pointer-events: none;
+            display: flex; gap: 8px; align-items: center;
+        }
+        .gear-btn {
+            width: 52px; height: 52px; border-radius: 8px;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(0,0,0,0.7); color: #888;
+            font-family: 'Consolas', monospace;
+            font-size: 22px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+        }
+        .gear-btn.active {
+            border-color: #0f0; color: #0f0;
+            background: rgba(0,255,0,0.15);
+            box-shadow: 0 0 12px rgba(0,255,0,0.3);
+        }
+        .gear-btn.active-reverse {
+            border-color: #f44; color: #f44;
+            background: rgba(255,60,60,0.15);
+            box-shadow: 0 0 12px rgba(255,60,60,0.3);
+        }
+        #gear-hint {
+            color: #666; font-family: 'Consolas', monospace;
+            font-size: 10px; text-align: center; margin-top: 2px;
             pointer-events: none;
+        }
+        #collision-flash {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none; background: rgba(255,0,0,0);
+            transition: background 0.05s; z-index: 10;
+        }
+        #collision-flash.active { background: rgba(255,0,0,0.15); }
+        #collision-text {
+            position: absolute; top: 80px; left: 50%;
+            transform: translateX(-50%); color: #ff4444;
+            font-family: 'Consolas', monospace;
+            font-size: 18px; font-weight: bold;
+            text-shadow: 0 0 8px rgba(255,0,0,0.5);
+            pointer-events: none; opacity: 0; transition: opacity 0.2s;
+        }
+        #collision-text.visible { opacity: 1; }
+        #parking-status {
+            position: absolute; top: 16px; right: 16px;
+            pointer-events: none; font-family: 'Consolas', monospace;
+            font-size: 13px; background: rgba(0,0,0,0.6);
+            padding: 10px 14px; border-radius: 6px; line-height: 1.8;
+        }
+        #parking-status .label { color: #aaa; }
+        #parking-status .value { color: #fff; font-weight: bold; }
+        #parking-status .ok { color: #0f0; }
+        #parking-status .ng { color: #f44; }
+        #success-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none; z-index: 20;
+            opacity: 0; transition: opacity 0.5s;
+        }
+        #success-overlay.visible { opacity: 1; }
+        #success-box {
+            background: rgba(0,100,0,0.9); border: 3px solid #0f0;
+            border-radius: 16px; padding: 30px 60px; text-align: center;
+            box-shadow: 0 0 40px rgba(0,255,0,0.3);
+        }
+        #success-box h1 {
+            color: #0f0; font-family: 'Consolas', monospace;
+            font-size: 36px; margin-bottom: 10px;
+        }
+        #success-box p {
+            color: #aaffaa; font-family: 'Consolas', monospace; font-size: 16px;
         }
     </style>
 </head>
 <body>
-
 <div id="hud">
-    &#x1F697; 物理停车场模拟器 (Cannon-es)<br>
-    W - 加速 &nbsp; S - 刹车/倒车<br>
-    空格 - 手刹 &nbsp; PageUp/Down - 视距<br>
-    <span style="color:#0ff">鼠标拖拽方向盘或键盘 A/D 转向</span>
+    &#x1F697; 倒车入库模拟器<br>
+    W/S - 油门/刹车 &nbsp; 空格 - 手刹<br>
+    D键 - 前进档 &nbsp; R键 - 倒车档/重置<br>
+    A/D - 转向 &nbsp; PageUp/Down - 视距
 </div>
-
 <div id="speed">0 km/h</div>
 <div id="physics-info">加载中...</div>
-
-<!-- 方向盘 UI -->
+<div id="gear-display">
+    <div class="gear-btn" id="gear-R">R</div>
+    <div class="gear-btn active" id="gear-D">D</div>
+</div>
+<div id="gear-hint">D - 前进档 | R - 倒车档</div>
+<div id="collision-flash"></div>
+<div id="collision-text">&#x26A0; 碰撞！</div>
+<div id="parking-status">
+    <div><span class="label">车位：</span><span class="value">A区-03</span></div>
+    <div><span class="label">水平偏差：</span><span class="value" id="ps-posX">--</span></div>
+    <div><span class="label">纵向偏差：</span><span class="value" id="ps-posZ">--</span></div>
+    <div><span class="label">角度偏差：</span><span class="value" id="ps-angle">--</span></div>
+    <div><span class="label">车位内：</span><span class="value" id="ps-inSpot">--</span></div>
+    <div><span class="label">车身正：</span><span class="value" id="ps-aligned">--</span></div>
+    <div><span class="label">状态：</span><span class="value" id="ps-result">--</span></div>
+</div>
+<div id="success-overlay">
+    <div id="success-box">
+        <h1>&#x2705; 入库成功！</h1>
+        <p>按 R 重置车辆再来一次</p>
+    </div>
+</div>
 <div id="steering-wrapper">
     <div id="steering-label">STEERING</div>
     <canvas id="steering-canvas" width="180" height="180"></canvas>
     <div id="steering-angle">0.0 deg</div>
 </div>
-
 <script type="importmap">
 {
     "imports": {
@@ -104,24 +169,17 @@
     }
 }
 </script>
-
 <script type="module">
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-
 // =============================================
 // 一、Three.js 场景、相机、渲染器
 // =============================================
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 scene.fog = new THREE.Fog(0x87CEEB, 80, 200);
-
-const camera = new THREE.PerspectiveCamera(
-    60, window.innerWidth / window.innerHeight, 0.1, 1000
-);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(0, 8, 15);
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -132,108 +190,74 @@ document.body.appendChild(renderer.domElement);
 // =============================================
 // 二、灯光系统
 // =============================================
-
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambientLight);
-
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
 dirLight.position.set(20, 30, 10);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 2048;
-dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 100;
-dirLight.shadow.camera.left = -40;
-dirLight.shadow.camera.right = 40;
-dirLight.shadow.camera.top = 40;
-dirLight.shadow.camera.bottom = -40;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 0.5; dirLight.shadow.camera.far = 100;
+dirLight.shadow.camera.left = -40; dirLight.shadow.camera.right = 40;
+dirLight.shadow.camera.top = 40; dirLight.shadow.camera.bottom = -40;
 scene.add(dirLight);
-
-const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x362A28, 0.4);
-scene.add(hemiLight);
+scene.add(new THREE.HemisphereLight(0x87CEEB, 0x362A28, 0.4));
 
 // =============================================
-// 三、Cannon-es 物理世界初始化
+// 三、Cannon-es 物理世界
 // =============================================
-
-const world = new CANNON.World({
-    gravity: new CANNON.Vec3(0, -9.82, 0),
-    allowSleep: true,
-});
-
-const defaultContactMaterial = new CANNON.ContactMaterial(
-    new CANNON.Material('default'),
-    new CANNON.Material('default'),
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0), allowSleep: true });
+world.defaultContactMaterial = new CANNON.ContactMaterial(
+    new CANNON.Material('default'), new CANNON.Material('default'),
     { friction: 0.3, restitution: 0.2, contactEquationStiffness: 1e8, contactEquationRelaxation: 3 }
 );
-world.defaultContactMaterial = defaultContactMaterial;
-
 const groundMaterial = new CANNON.Material('ground');
 const wheelMaterial = new CANNON.Material('wheel');
-
-const wheelGroundContact = new CANNON.ContactMaterial(
-    wheelMaterial, groundMaterial,
+world.addContactMaterial(new CANNON.ContactMaterial(wheelMaterial, groundMaterial,
     { friction: 0.45, restitution: 0.0, contactEquationStiffness: 1e8, contactEquationRelaxation: 3 }
-);
-world.addContactMaterial(wheelGroundContact);
+));
 
 // =============================================
-// 四、物理地面刚体
+// 四、物理地面
 // =============================================
-
-const groundBody = new CANNON.Body({
-    mass: 0,
-    shape: new CANNON.Plane(),
-    material: groundMaterial,
-});
+const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: groundMaterial });
 groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
 world.addBody(groundBody);
-
-// Three.js 地面
-const groundGeo = new THREE.PlaneGeometry(200, 200);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9, metalness: 0.0 });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
+const groundMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 })
+);
+groundMesh.rotation.x = -Math.PI / 2; groundMesh.receiveShadow = true;
+scene.add(groundMesh);
 const gridHelper = new THREE.GridHelper(200, 100, 0x888888, 0x666666);
 gridHelper.position.y = 0.01;
 scene.add(gridHelper);
 
 // =============================================
-// 五、停车场元素
+// 五、停车场环境元素
 // =============================================
-
 function createParkingLines() {
-    const group = new THREE.Group();
-    const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+    const g = new THREE.Group();
+    const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
     for (let row = 0; row < 2; row++) {
-        const zBase = row === 0 ? -8 : 8;
-        const dir = row === 0 ? -1 : 1;
+        const zB = row === 0 ? -8 : 8, d = row === 0 ? -1 : 1;
         for (let i = 0; i < 10; i++) {
             const x = -20 + i * 4;
-            const left = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 3.5), lineMat);
-            left.position.set(x, 0.02, zBase + dir * 1.5);
-            group.add(left);
-            const right = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 3.5), lineMat);
-            right.position.set(x + 3.5, 0.02, zBase + dir * 1.5);
-            group.add(right);
-            const bottom = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.02, 0.15), lineMat);
-            bottom.position.set(x + 1.75, 0.02, zBase);
-            group.add(bottom);
+            const l = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 3.5), m);
+            l.position.set(x, 0.02, zB + d * 1.5); g.add(l);
+            const r = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.02, 3.5), m);
+            r.position.set(x + 3.5, 0.02, zB + d * 1.5); g.add(r);
+            const b = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.02, 0.15), m);
+            b.position.set(x + 1.75, 0.02, zB); g.add(b);
         }
     }
-    scene.add(group);
+    scene.add(g);
 }
 createParkingLines();
 
 function createBollards() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xCC0000, roughness: 0.6 });
+    const m = new THREE.MeshStandardMaterial({ color: 0xCC0000, roughness: 0.6 });
     [[-25,-15],[-25,-11],[-25,11],[-25,15],[25,-15],[25,-11],[25,11],[25,15]].forEach(([x, z]) => {
-        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8), mat);
-        mesh.position.set(x, 0.6, z); mesh.castShadow = true; mesh.receiveShadow = true;
-        scene.add(mesh);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8), m);
+        mesh.position.set(x, 0.6, z); mesh.castShadow = true; scene.add(mesh);
         const body = new CANNON.Body({ mass: 0, shape: new CANNON.Cylinder(0.2, 0.25, 1.2, 8), position: new CANNON.Vec3(x, 0.6, z) });
         world.addBody(body);
     });
@@ -241,154 +265,171 @@ function createBollards() {
 createBollards();
 
 function createBuildings() {
-    const configs = [
-        { x: -35, z: 0, w: 15, h: 12, d: 15, color: 0x8899AA },
-        { x: 35, z: 0, w: 12, h: 8, d: 20, color: 0x998877 },
-        { x: 0, z: -30, w: 60, h: 10, d: 8, color: 0x778899 },
-        { x: 0, z: 30, w: 60, h: 14, d: 8, color: 0x889988 },
-    ];
-    configs.forEach(({ x, z, w, h, d, color }) => {
-        const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(w, h, d),
-            new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.1 })
-        );
-        mesh.position.set(x, h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true;
-        scene.add(mesh);
-        const body = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) });
-        world.addBody(body);
+    [
+        { x: -35, z: 0, w: 15, h: 12, d: 15, c: 0x8899AA },
+        { x: 35, z: 0, w: 12, h: 8, d: 20, c: 0x998877 },
+        { x: 0, z: -30, w: 60, h: 10, d: 8, c: 0x778899 },
+        { x: 0, z: 30, w: 60, h: 14, d: 8, c: 0x889988 },
+    ].forEach(({ x, z, w, h, d, c }) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 }));
+        mesh.position.set(x, h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+        world.addBody(new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)), position: new CANNON.Vec3(x, h/2, z) }));
     });
 }
 createBuildings();
 
 // =============================================
-// 六、Cannon-es RaycastVehicle 车辆
+// 六、目标车库（倒车入库）
 // =============================================
-
-const VEHICLE_CFG = {
-    wheelRadius: 0.3,
-    suspensionStiffness: 30,
-    suspensionRestLength: 0.2,
-    dampingRelaxation: 2.3,
-    dampingCompression: 4.4,
-    maxSuspensionForce: 100000,
-    maxSuspensionTravel: 0.2,
-    rollInfluence: 0.01,
-    maxSteerAngle: 0.6,
-    engineForce: 600,
-    brakeForce: 50,
+const PS = {
+    cx: 22, cz: 18,
+    width: 3.5, depth: 5.5,
+    targetAngle: 0,
+    angleTolerance: 15,
+    wallH: 1.5, wallT: 0.15,
 };
 
-const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.35, 2));
+function createParkingSpot() {
+    const { cx, cz, width, depth, wallH, wallT } = PS;
+    const hW = width / 2, hD = depth / 2;
+    const lineMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 });
+
+    // 白色标线（三面，开口在 -Z）
+    [{ x: cx - hW, z: cz, w: wallT, d: depth },
+     { x: cx + hW, z: cz, w: wallT, d: depth },
+     { x: cx, z: cz + hD, w: width + wallT * 2, d: wallT }
+    ].forEach(({ x, z, w, d }) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), lineMat);
+        mesh.position.set(x, 0.02, z); scene.add(mesh);
+    });
+
+    // 车库地面
+    const sg = new THREE.Mesh(new THREE.PlaneGeometry(width - 0.1, depth - 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 }));
+    sg.rotation.x = -Math.PI / 2; sg.position.set(cx, 0.015, cz); scene.add(sg);
+
+    // 三面碰撞墙壁
+    const wallMat = new CANNON.Material('wall');
+    world.addContactMaterial(new CANNON.ContactMaterial(wallMat, new CANNON.Material('chassis'),
+        { friction: 0.3, restitution: 0.5, contactEquationStiffness: 1e8, contactEquationRelaxation: 3 }));
+
+    const wallDefs = [
+        { x: cx - hW - wallT / 2, z: cz, he: new CANNON.Vec3(wallT / 2, wallH / 2, depth / 2 + wallT) },
+        { x: cx + hW + wallT / 2, z: cz, he: new CANNON.Vec3(wallT / 2, wallH / 2, depth / 2 + wallT) },
+        { x: cx, z: cz + hD + wallT / 2, he: new CANNON.Vec3(width / 2 + wallT, wallH / 2, wallT / 2) },
+    ];
+    const walls = [];
+    wallDefs.forEach(({ x, z, he }) => {
+        const body = new CANNON.Body({ mass: 0, material: wallMat, shape: new CANNON.Box(he), position: new CANNON.Vec3(x, wallH / 2, z) });
+        body.userData = { type: 'parking_wall' };
+        world.addBody(body); walls.push(body);
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(he.x * 2, he.y * 2, he.z * 2),
+            new THREE.MeshStandardMaterial({ color: 0x88aacc, transparent: true, opacity: 0.35 }));
+        mesh.position.set(x, wallH / 2, z); mesh.castShadow = true; scene.add(mesh);
+    });
+    return walls;
+}
+const parkingWalls = createParkingSpot();
+
+// =============================================
+// 七、Cannon-es RaycastVehicle
+// =============================================
+const VC = {
+    wheelRadius: 0.3, suspensionStiffness: 30, suspensionRestLength: 0.2,
+    dampingRelaxation: 2.3, dampingCompression: 4.4, maxSuspensionForce: 100000,
+    maxSuspensionTravel: 0.2, rollInfluence: 0.01, maxSteerAngle: 0.6,
+    engineForce: 600, brakeForce: 50,
+};
 const chassisBody = new CANNON.Body({
-    mass: 150,
-    shape: chassisShape,
-    position: new CANNON.Vec3(0, VEHICLE_CFG.wheelRadius + VEHICLE_CFG.suspensionRestLength + 0.35, 0),
+    mass: 150, shape: new CANNON.Box(new CANNON.Vec3(1, 0.35, 2)),
+    position: new CANNON.Vec3(PS.cx, VC.wheelRadius + VC.suspensionRestLength + 0.35, 6),
 });
 world.addBody(chassisBody);
 
-const vehicle = new CANNON.RaycastVehicle({
-    chassisBody,
-    indexRightAxis: 0,
-    indexUpAxis: 1,
-    indexForwardAxis: 2,
-});
-
-const wheelOptions = {
-    radius: VEHICLE_CFG.wheelRadius,
-    directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: VEHICLE_CFG.suspensionStiffness,
-    suspensionRestLength: VEHICLE_CFG.suspensionRestLength,
-    maxSuspensionTravel: VEHICLE_CFG.maxSuspensionTravel,
-    dampingRelaxation: VEHICLE_CFG.dampingRelaxation,
-    dampingCompression: VEHICLE_CFG.dampingCompression,
-    maxSuspensionForce: VEHICLE_CFG.maxSuspensionForce,
-    rollInfluence: VEHICLE_CFG.rollInfluence,
-    axleLocal: new CANNON.Vec3(-1, 0, 0),
+const vehicle = new CANNON.RaycastVehicle({ chassisBody, indexRightAxis: 0, indexUpAxis: 1, indexForwardAxis: 2 });
+const wOpts = {
+    radius: VC.wheelRadius, directionLocal: new CANNON.Vec3(0, -1, 0),
+    suspensionStiffness: VC.suspensionStiffness, suspensionRestLength: VC.suspensionRestLength,
+    maxSuspensionTravel: VC.maxSuspensionTravel, dampingRelaxation: VC.dampingRelaxation,
+    dampingCompression: VC.dampingCompression, maxSuspensionForce: VC.maxSuspensionForce,
+    rollInfluence: VC.rollInfluence, axleLocal: new CANNON.Vec3(-1, 0, 0),
     chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
-    customSlidingRotationalSpeed: -30,
-    useCustomSlidingRotationalSpeed: true,
+    customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true,
 };
-
-const wheelPositions = [
-    new CANNON.Vec3(-1.0, 0, 1.4),
-    new CANNON.Vec3(1.0, 0, 1.4),
-    new CANNON.Vec3(-1.0, 0, -1.4),
-    new CANNON.Vec3(1.0, 0, -1.4),
+const wPos = [
+    new CANNON.Vec3(-1, 0, 1.4), new CANNON.Vec3(1, 0, 1.4),
+    new CANNON.Vec3(-1, 0, -1.4), new CANNON.Vec3(1, 0, -1.4),
 ];
-
-const steerIndex = [0, 1];
-const driveIndex = [2, 3];
-
-wheelPositions.forEach((pos) => {
-    const options = { ...wheelOptions, chassisConnectionPointLocal: pos };
-    vehicle.addWheel(options);
-});
+const steerIdx = [0, 1], driveIdx = [2, 3];
+wPos.forEach(p => vehicle.addWheel({ ...wOpts, chassisConnectionPointLocal: p }));
 vehicle.addToWorld(world);
 
 // =============================================
-// 七、Three.js 汽车视觉模型
+// 八、Three.js 汽车视觉模型
 // =============================================
-
 const carGroup = new THREE.Group();
+const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.7, 4),
+    new THREE.MeshStandardMaterial({ color: 0x1a5276, roughness: 0.3, metalness: 0.6 }));
+bodyMesh.castShadow = true; carGroup.add(bodyMesh);
+const cabinMesh = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 2.2),
+    new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.2, metalness: 0.7 }));
+cabinMesh.position.set(0, 0.65, -0.3); cabinMesh.castShadow = true; carGroup.add(cabinMesh);
 
-const bodyGeo = new THREE.BoxGeometry(2, 0.7, 4);
-const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1a5276, roughness: 0.3, metalness: 0.6 });
-const chassisMesh = new THREE.Mesh(bodyGeo, bodyMat);
-chassisMesh.castShadow = true;
-carGroup.add(chassisMesh);
+const glassMat = new THREE.MeshStandardMaterial({ color: 0xaaddff, transparent: true, opacity: 0.5, roughness: 0.1, metalness: 0.8 });
+const wg = new THREE.BoxGeometry(1.6, 0.5, 0.05);
+const fg = new THREE.Mesh(wg, glassMat); fg.position.set(0, 0.7, 0.75); fg.rotation.x = 0.3; carGroup.add(fg);
+const rg = new THREE.Mesh(wg, glassMat); rg.position.set(0, 0.7, -1.4); rg.rotation.x = -0.3; carGroup.add(rg);
 
-const cabinGeo = new THREE.BoxGeometry(1.8, 0.6, 2.2);
-const cabinMat = new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.2, metalness: 0.7 });
-const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
-cabinMesh.position.set(0, 0.65, -0.3);
-cabinMesh.castShadow = true;
-carGroup.add(cabinMesh);
-
-const glassMat = new THREE.MeshStandardMaterial({
-    color: 0xaaddff, transparent: true, opacity: 0.5, roughness: 0.1, metalness: 0.8
-});
-const windshieldGeo = new THREE.BoxGeometry(1.6, 0.5, 0.05);
-const frontGlass = new THREE.Mesh(windshieldGeo, glassMat);
-frontGlass.position.set(0, 0.7, 0.75); frontGlass.rotation.x = 0.3;
-carGroup.add(frontGlass);
-const rearGlass = new THREE.Mesh(windshieldGeo, glassMat);
-rearGlass.position.set(0, 0.7, -1.4); rearGlass.rotation.x = -0.3;
-carGroup.add(rearGlass);
-
-const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffff00, emissiveIntensity: 0.5 });
-const taillightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 });
+const hMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffff00, emissiveIntensity: 0.5 });
+const tMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 });
 [-0.7, 0.7].forEach(x => {
-    carGroup.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), headlightMat), { position: new THREE.Vector3(x, 0.1, 2.01) }));
-    carGroup.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), taillightMat), { position: new THREE.Vector3(x, 0.1, -2.01) }));
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), hMat); hl.position.set(x, 0.1, 2.01); carGroup.add(hl);
+    const tl = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), tMat); tl.position.set(x, 0.1, -2.01); carGroup.add(tl);
 });
-
 scene.add(carGroup);
 
-// 四个车轮视觉模型
 const wheelMeshes = [];
-const wheelMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8, metalness: 0.3 });
-const hubMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 });
-
+const tM = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8, metalness: 0.3 });
+const hM = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 });
 for (let i = 0; i < 4; i++) {
-    const wg = new THREE.Group();
-    const tire = new THREE.Mesh(new THREE.CylinderGeometry(VEHICLE_CFG.wheelRadius, VEHICLE_CFG.wheelRadius, 0.25, 16), wheelMat);
-    tire.rotation.z = Math.PI / 2; tire.castShadow = true; wg.add(tire);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 6), hubMat);
-    hub.rotation.z = Math.PI / 2; wg.add(hub);
-    scene.add(wg);
-    wheelMeshes.push(wg);
+    const wg2 = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(VC.wheelRadius, VC.wheelRadius, 0.25, 16), tM);
+    tire.rotation.z = Math.PI / 2; tire.castShadow = true; wg2.add(tire);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.26, 6), hM);
+    hub.rotation.z = Math.PI / 2; wg2.add(hub);
+    scene.add(wg2); wheelMeshes.push(wg2);
 }
 
 // =============================================
-// 八、键盘输入管理
+// 九、档位系统
 // =============================================
+let currentGear = 'D';
+const gearDElem = document.getElementById('gear-D');
+const gearRElem = document.getElementById('gear-R');
+function updateGearUI() {
+    gearDElem.className = currentGear === 'D' ? 'gear-btn active' : 'gear-btn';
+    gearRElem.className = currentGear === 'R' ? 'gear-btn active-reverse' : 'gear-btn';
+}
 
+// =============================================
+// 十、键盘输入
+// =============================================
 const keys = new Set();
-let isBraking = false;
+let isBraking = false, shouldReset = false;
 
 window.addEventListener('keydown', (e) => {
-    keys.add(e.key.toLowerCase());
-    if (e.key === ' ') isBraking = true;
+    const key = e.key.toLowerCase();
+    keys.add(key);
+    if (e.key === ' ') { isBraking = true; e.preventDefault(); }
+    if (key === 'd' && !e.repeat) { currentGear = 'D'; updateGearUI(); }
+    if (key === 'r' && !e.repeat) {
+        const v = chassisBody.velocity;
+        if (Math.sqrt(v.x * v.x + v.z * v.z) < 0.5) {
+            shouldReset = true;
+        } else {
+            currentGear = 'R'; updateGearUI();
+        }
+    }
 });
 window.addEventListener('keyup', (e) => {
     keys.delete(e.key.toLowerCase());
@@ -396,279 +437,208 @@ window.addEventListener('keyup', (e) => {
 });
 
 // =============================================
-// 九、可拖拽方向盘 UI（Canvas 2D）
+// 十一、方向盘 UI
 // =============================================
-
-/**
- * SteeringWheel 类
- * - 在 Canvas 上绘制方向盘
- * - 支持鼠标拖拽旋转（最大 ±270°）
- * - 释放后自动回弹到中位
- * - 输出 angle（度）和归一化值 [-1, 1]
- */
 class SteeringWheel {
-    constructor(canvasId, angleDisplayId) {
-        this.canvas = document.getElementById(canvasId);
+    constructor() {
+        this.canvas = document.getElementById('steering-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.angleDisplay = document.getElementById(angleDisplayId);
-
-        this.size = this.canvas.width;              // 画布尺寸（正方形）
-        this.cx = this.size / 2;                     // 圆心 X
-        this.cy = this.size / 2;                     // 圆心 Y
-        this.outerR = this.size / 2 - 8;             // 方向盘外圈半径
-        this.innerR = this.outerR * 0.55;            // 内圈辐条区域半径
-        this.gripWidth = 14;                         // 握圈宽度
-
-        // ---- 旋转状态 ----
-        this.currentAngle = 0;                       // 当前旋转角度（度），范围 [-270, 270]
-        this.maxAngle = 270;                         // 最大旋转角度
-        this.isDragging = false;                     // 是否正在拖拽
-        this.dragStartAngle = 0;                     // 拖拽起始角度（相对于圆心）
-        this.dragStartRotation = 0;                  // 拖拽起始时方向盘旋转角度
-
-        // ---- 回弹弹簧 ----
-        this.springEnabled = false;                  // 释放后启用回弹
-        this.springVelocity = 0;                     // 回弹速度
-
-        this._bindEvents();
+        this.angleDisplay = document.getElementById('steering-angle');
+        this.size = this.canvas.width;
+        this.cx = this.size / 2; this.cy = this.size / 2;
+        this.outerR = this.size / 2 - 8;
+        this.innerR = this.outerR * 0.55;
+        this.gripWidth = 14;
+        this.currentAngle = 0; this.maxAngle = 270;
+        this.isDragging = false; this.dragStartAngle = 0; this.dragStartRotation = 0;
+        this.springEnabled = false; this.springVelocity = 0;
+        this._bind();
     }
-
-    /** 绑定鼠标 / 触摸事件 */
-    _bindEvents() {
+    _bind() {
         const c = this.canvas;
-
-        c.addEventListener('mousedown', (e) => this._onPointerDown(e));
-        window.addEventListener('mousemove', (e) => this._onPointerMove(e));
-        window.addEventListener('mouseup',   (e) => this._onPointerUp(e));
-
-        c.addEventListener('touchstart', (e) => { e.preventDefault(); this._onPointerDown(e.touches[0]); }, { passive: false });
-        window.addEventListener('touchmove', (e) => { if (this.isDragging) this._onPointerMove(e.touches[0]); }, { passive: false });
-        window.addEventListener('touchend',  (e) => this._onPointerUp(e));
+        c.addEventListener('mousedown', e => this._down(e));
+        window.addEventListener('mousemove', e => this._move(e));
+        window.addEventListener('mouseup', () => this._up());
+        c.addEventListener('touchstart', e => { e.preventDefault(); this._down(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchmove', e => { if (this.isDragging) this._move(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchend', () => this._up());
     }
-
-    /** 计算指针相对于圆心的角度（度） */
-    _getPointerAngle(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const px = e.clientX - rect.left - this.cx;
-        const py = e.clientY - rect.top - this.cy;
-        return Math.atan2(py, px) * (180 / Math.PI);   // 范围 (-180, 180]
+    _ang(e) {
+        const r = this.canvas.getBoundingClientRect();
+        return Math.atan2(e.clientY - r.top - this.cy, e.clientX - r.left - this.cx) * 180 / Math.PI;
     }
-
-    _onPointerDown(e) {
-        // 检测点击位置是否在方向盘区域内
-        const rect = this.canvas.getBoundingClientRect();
-        const px = e.clientX - rect.left - this.cx;
-        const py = e.clientY - rect.top - this.cy;
-        const dist = Math.sqrt(px * px + py * py);
-        if (dist > this.outerR + 20) return;           // 点击太远则忽略
-
-        this.isDragging = true;
-        this.springEnabled = false;
-        this.springVelocity = 0;
-        this.dragStartAngle = this._getPointerAngle(e);
-        this.dragStartRotation = this.currentAngle;
+    _down(e) {
+        const r = this.canvas.getBoundingClientRect();
+        const dx = e.clientX - r.left - this.cx, dy = e.clientY - r.top - this.cy;
+        if (Math.sqrt(dx*dx + dy*dy) > this.outerR + 20) return;
+        this.isDragging = true; this.springEnabled = false; this.springVelocity = 0;
+        this.dragStartAngle = this._ang(e); this.dragStartRotation = this.currentAngle;
     }
-
-    _onPointerMove(e) {
+    _move(e) {
         if (!this.isDragging) return;
-
-        const pointerAngle = this._getPointerAngle(e);
-        // 计算拖拽角度差（处理跨越 ±180° 的跳变）
-        let delta = pointerAngle - this.dragStartAngle;
-        if (delta > 180)  delta -= 360;
-        if (delta < -180) delta += 360;
-
-        // 限制在 ±maxAngle 范围
-        this.currentAngle = THREE.MathUtils.clamp(
-            this.dragStartRotation + delta,
-            -this.maxAngle,
-            this.maxAngle
-        );
+        let d = this._ang(e) - this.dragStartAngle;
+        if (d > 180) d -= 360; if (d < -180) d += 360;
+        this.currentAngle = THREE.MathUtils.clamp(this.dragStartRotation + d, -this.maxAngle, this.maxAngle);
     }
-
-    _onPointerUp() {
-        if (!this.isDragging) return;
-        this.isDragging = false;
-        this.springEnabled = true;                     // 启用回弹
-    }
-
-    /** 每帧更新（回弹动画） */
+    _up() { if (this.isDragging) { this.isDragging = false; this.springEnabled = true; } }
     update(dt) {
         if (this.springEnabled && !this.isDragging) {
-            // 弹簧阻尼回弹：力 = -stiffness * angle - damping * velocity
-            const stiffness = 12;                      // 弹簧刚度
-            const damping = 6;                         // 阻尼系数
-            const force = -stiffness * this.currentAngle - damping * this.springVelocity;
-            this.springVelocity += force * dt;
-            this.currentAngle += this.springVelocity * dt;
-
-            // 接近中位时归零
+            const f = -12 * this.currentAngle - 6 * this.springVelocity;
+            this.springVelocity += f * dt; this.currentAngle += this.springVelocity * dt;
             if (Math.abs(this.currentAngle) < 0.3 && Math.abs(this.springVelocity) < 1) {
-                this.currentAngle = 0;
-                this.springVelocity = 0;
-                this.springEnabled = false;
+                this.currentAngle = 0; this.springVelocity = 0; this.springEnabled = false;
             }
         }
-
-        // 更新角度显示
-        if (this.angleDisplay) {
-            this.angleDisplay.textContent = `${this.currentAngle.toFixed(1)} deg`;
-        }
+        this.angleDisplay.textContent = this.currentAngle.toFixed(1) + ' deg';
     }
-
-    /** 获取归一化转向值 [-1, 1]，用于映射到物理转向角 */
-    getSteerNormalized() {
-        return this.currentAngle / this.maxAngle;      // -1 = 左满舵, +1 = 右满舵
-    }
-
-    /** 绘制方向盘（每帧调用） */
+    getSteer() { return this.currentAngle / this.maxAngle; }
     draw() {
-        const ctx = this.ctx;
-        const cx = this.cx;
-        const cy = this.cy;
-        const R = this.outerR;
-
+        const { ctx, cx: cx, cy: cy, outerR: R, innerR: iR, gripWidth: gw } = this;
         ctx.clearRect(0, 0, this.size, this.size);
-
-        // ---- 背景刻度弧（左右各 270° 的弧形轨道）----
-        ctx.save();
-        ctx.translate(cx, cy);
-
-        // 背景弧线：从 -270° 到 +270°（起始角 = -90° - 270° = -360°，结束角 = -90° + 270° = 180°）
-        // 实际画弧范围：120° 到 420°（即 -240° 到 60°，换算后）
-        // 简化：从 210° (底部左侧) 顺时针到 330° (底部右侧) = 从 +210° 到 +150°（跨底部）
-        const arcStart = Math.PI * 0.75;   // 135°
-        const arcEnd   = Math.PI * 2.25;   // 405° = 45°
-
-        // 背景弧（深灰）
-        ctx.beginPath();
-        ctx.arc(0, 0, R + 3, arcStart, arcEnd);
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-        ctx.lineWidth = 6;
-        ctx.stroke();
-
-        // 当前旋转位置指示弧（青色）
-        const normalized = this.currentAngle / this.maxAngle;  // -1 ~ +1
-        const indicatorEnd = arcStart + normalized * (arcEnd - arcStart) / 2 + (arcEnd - arcStart) / 2;
-        const arcMid = (arcStart + arcEnd) / 2;
+        ctx.save(); ctx.translate(cx, cy);
+        const arcS = Math.PI * 0.75, arcE = Math.PI * 2.25;
+        ctx.beginPath(); ctx.arc(0, 0, R + 3, arcS, arcE);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 6; ctx.stroke();
+        const n = this.currentAngle / this.maxAngle, mid = (arcS + arcE) / 2;
         if (Math.abs(this.currentAngle) > 0.5) {
-            ctx.beginPath();
-            ctx.arc(0, 0, R + 3,
-                normalized < 0 ? indicatorEnd : arcMid,
-                normalized < 0 ? arcMid : indicatorEnd
-            );
-            ctx.strokeStyle = normalized < 0 ? '#ff6644' : '#44ff66';  // 左红右绿
-            ctx.lineWidth = 6;
-            ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, R + 3, n < 0 ? mid + n * (arcE - arcS) / 2 : mid, n < 0 ? mid : mid + n * (arcE - arcS) / 2);
+            ctx.strokeStyle = n < 0 ? '#ff6644' : '#44ff66'; ctx.lineWidth = 6; ctx.stroke();
         }
-
-        // 刻度线（每 30° 一条）
         for (let deg = -this.maxAngle; deg <= this.maxAngle; deg += 30) {
-            const rad = (deg - 90) * Math.PI / 180;       // 0° 在顶部
-            const isMajor = deg % 90 === 0;
-            const len = isMajor ? 10 : 5;
-            ctx.beginPath();
-            ctx.moveTo(Math.cos(rad) * (R - len), Math.sin(rad) * (R - len));
+            const rad = (deg - 90) * Math.PI / 180, maj = deg % 90 === 0, len = maj ? 10 : 5;
+            ctx.beginPath(); ctx.moveTo(Math.cos(rad) * (R - len), Math.sin(rad) * (R - len));
             ctx.lineTo(Math.cos(rad) * R, Math.sin(rad) * R);
-            ctx.strokeStyle = isMajor ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)';
-            ctx.lineWidth = isMajor ? 2 : 1;
-            ctx.stroke();
+            ctx.strokeStyle = maj ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = maj ? 2 : 1; ctx.stroke();
         }
+        ctx.save(); ctx.rotate(this.currentAngle * Math.PI / 180);
+        ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.strokeStyle = '#555'; ctx.lineWidth = gw; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = gw - 4; ctx.stroke();
+        ctx.lineWidth = 8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(0, -R + gw / 2); ctx.lineTo(0, -iR); ctx.strokeStyle = '#666'; ctx.stroke();
+        const bl = 240 * Math.PI / 180;
+        ctx.beginPath(); ctx.moveTo(Math.cos(bl) * (R - gw / 2), Math.sin(bl) * (R - gw / 2));
+        ctx.lineTo(Math.cos(bl) * iR, Math.sin(bl) * iR); ctx.strokeStyle = '#666'; ctx.stroke();
+        const br = 300 * Math.PI / 180;
+        ctx.beginPath(); ctx.moveTo(Math.cos(br) * (R - gw / 2), Math.sin(br) * (R - gw / 2));
+        ctx.lineTo(Math.cos(br) * iR, Math.sin(br) * iR); ctx.strokeStyle = '#666'; ctx.stroke();
+        const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, iR * 0.6);
+        hg.addColorStop(0, '#888'); hg.addColorStop(1, '#444');
+        ctx.beginPath(); ctx.arc(0, 0, iR * 0.55, 0, Math.PI * 2); ctx.fillStyle = hg; ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fillStyle = '#aaa'; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, -R + gw + 4); ctx.lineTo(-6, -R + gw + 16); ctx.lineTo(6, -R + gw + 16);
+        ctx.closePath(); ctx.fillStyle = '#ff3333'; ctx.fill();
+        ctx.restore(); ctx.restore();
+    }
+}
+const steeringWheel = new SteeringWheel();
 
-        // ---- 方向盘主体（跟随旋转）----
-        ctx.save();
-        ctx.rotate(this.currentAngle * Math.PI / 180);
+// =============================================
+// 十二、碰撞检测 + 碰撞反馈
+// =============================================
+let collisionTimer = 0;
+const collisionFlash = document.getElementById('collision-flash');
+const collisionText = document.getElementById('collision-text');
 
-        // 外圈（握把）
-        ctx.beginPath();
-        ctx.arc(0, 0, R, 0, Math.PI * 2);
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = this.gripWidth;
-        ctx.stroke();
+// 注册碰撞事件：检测车身与车库墙壁的碰撞
+chassisBody.addEventListener('collide', (e) => {
+    const other = e.body;
+    // 如果碰撞对象是车库墙壁
+    if (other.userData && other.userData.type === 'parking_wall') {
+        collisionTimer = 1.5;
+    }
+});
 
-        // 外圈高光
-        ctx.beginPath();
-        ctx.arc(0, 0, R, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.lineWidth = this.gripWidth - 4;
-        ctx.stroke();
+// =============================================
+// 十三、入库判定逻辑
+// =============================================
+let parkingSuccess = false;
+let successTimer = 0;
 
-        // 三条辐条（顶部居中、左下、右下）
-        ctx.lineWidth = 8;
-        ctx.lineCap = 'round';
+const psPosX = document.getElementById('ps-posX');
+const psPosZ = document.getElementById('ps-posZ');
+const psAngle = document.getElementById('ps-angle');
+const psInSpot = document.getElementById('ps-inSpot');
+const psAligned = document.getElementById('ps-aligned');
+const psResult = document.getElementById('ps-result');
+const successOverlay = document.getElementById('success-overlay');
 
-        // 顶部辐条（12 点方向）
-        ctx.beginPath();
-        ctx.moveTo(0, -R + this.gripWidth / 2);
-        ctx.lineTo(0, -this.innerR);
-        ctx.strokeStyle = '#666';
-        ctx.stroke();
+/**
+ * 入库判定条件：
+ * 1. 车身中心 X 坐标在车位左右边线内（容差0.3m）
+ * 2. 车身中心 Z 坐标在车位前后边线内（容差0.3m）
+ * 3. 车身朝向与目标角度差 < 15 度
+ *
+ * 注意：这里比较的是车身 Y 轴旋转（yaw），即水平面上的朝向。
+ * 目标角度为 0（车头朝 +Z，与车位方向一致）。
+ */
+function checkParking() {
+    if (parkingSuccess) return;
 
-        // 左下辐条（8 点方向，约 240°）
-        const blAngle = 240 * Math.PI / 180;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(blAngle) * (R - this.gripWidth / 2), Math.sin(blAngle) * (R - this.gripWidth / 2));
-        ctx.lineTo(Math.cos(blAngle) * this.innerR, Math.sin(blAngle) * this.innerR);
-        ctx.strokeStyle = '#666';
-        ctx.stroke();
+    const px = chassisBody.position.x;
+    const pz = chassisBody.position.z;
+    const halfW = PS.width / 2;
+    const halfD = PS.depth / 2;
+    const margin = 0.3;
 
-        // 右下辐条（4 点方向，约 300°）
-        const brAngle = 300 * Math.PI / 180;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(brAngle) * (R - this.gripWidth / 2), Math.sin(brAngle) * (R - this.gripWidth / 2));
-        ctx.lineTo(Math.cos(brAngle) * this.innerR, Math.sin(brAngle) * this.innerR);
-        ctx.strokeStyle = '#666';
-        ctx.stroke();
+    // 条件1：X 方向在车位内
+    const inX = px > (PS.cx - halfW + margin) && px < (PS.cx + halfW - margin);
+    // 条件2：Z 方向在车位内
+    const inZ = pz > (PS.cz - halfD + margin) && pz < (PS.cz + halfD - margin);
+    const inSpot = inX && inZ;
 
-        // 中心圆盘
-        const hubGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, this.innerR * 0.6);
-        hubGrad.addColorStop(0, '#888');
-        hubGrad.addColorStop(1, '#444');
-        ctx.beginPath();
-        ctx.arc(0, 0, this.innerR * 0.55, 0, Math.PI * 2);
-        ctx.fillStyle = hubGrad;
-        ctx.fill();
+    // 条件3：角度偏差
+    // 提取 Y 轴旋转角度（偏航角）
+    const euler = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w),
+        'YXZ'
+    );
+    let yawDeg = THREE.MathUtils.radToDeg(euler.y);
+    // 归一化到 [-180, 180]
+    while (yawDeg > 180) yawDeg -= 360;
+    while (yawDeg < -180) yawDeg += 360;
+    const angleDiff = Math.abs(yawDeg);
+    const aligned = angleDiff < PS.angleTolerance;
 
-        // 中心标志（小圆）
-        ctx.beginPath();
-        ctx.arc(0, 0, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#aaa';
-        ctx.fill();
+    // 更新状态面板
+    psPosX.textContent = (px - PS.cx).toFixed(2) + 'm';
+    psPosX.className = inX ? 'value ok' : 'value ng';
+    psPosZ.textContent = (pz - PS.cz).toFixed(2) + 'm';
+    psPosZ.className = inZ ? 'value ok' : 'value ng';
+    psAngle.textContent = yawDeg.toFixed(1) + ' deg';
+    psAngle.className = aligned ? 'value ok' : 'value ng';
+    psInSpot.textContent = inSpot ? '是' : '否';
+    psInSpot.className = inSpot ? 'value ok' : 'value ng';
+    psAligned.textContent = aligned ? '是' : '否';
+    psAligned.className = aligned ? 'value ok' : 'value ng';
 
-        // ---- 标记点（红色三角，指示 12 点位置）----
-        ctx.beginPath();
-        ctx.moveTo(0, -R + this.gripWidth + 4);
-        ctx.lineTo(-6, -R + this.gripWidth + 16);
-        ctx.lineTo(6, -R + this.gripWidth + 16);
-        ctx.closePath();
-        ctx.fillStyle = '#ff3333';
-        ctx.fill();
-
-        ctx.restore(); // 恢复方向盘旋转
-        ctx.restore(); // 恢复 translate
+    if (inSpot && aligned) {
+        psResult.textContent = '✓ 入库成功！';
+        psResult.className = 'value ok';
+        parkingSuccess = true;
+        successTimer = 5;
+        successOverlay.classList.add('visible');
+    } else if (inSpot) {
+        psResult.textContent = '调整角度...';
+        psResult.className = 'value ng';
+    } else {
+        psResult.textContent = '驶入车位';
+        psResult.className = 'value ng';
     }
 }
 
-// 创建方向盘实例
-const steeringWheel = new SteeringWheel('steering-canvas', 'steering-angle');
-
 // =============================================
-// 十、第三人称相机
+// 十四、第三人称相机
 // =============================================
-
 const camTarget = {
-    distance: 12,
-    minDistance: 5,
-    maxDistance: 25,
-    height: 5,
-    currentPos: new THREE.Vector3(0, 8, 15),
-    currentLookAt: new THREE.Vector3(),
+    distance: 12, minDistance: 5, maxDistance: 25, height: 5,
+    currentPos: new THREE.Vector3(PS.cx, 8, PS.cz - 20),
+    currentLookAt: new THREE.Vector3(PS.cx, 1, PS.cz),
 };
 
 // =============================================
-// 十一、窗口自适应
+// 十五、窗口自适应
 // =============================================
-
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -676,64 +646,76 @@ window.addEventListener('resize', () => {
 });
 
 // =============================================
-// 十二、悬挂调试辅助线
+// 十六、悬挂调试辅助线
 // =============================================
-
-const suspensionHelpers = [];
+const suspHelpers = [];
 for (let i = 0; i < 4; i++) {
-    const geo = new THREE.CylinderGeometry(0.02, 0.02, 1, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const helper = new THREE.Mesh(geo, mat);
-    scene.add(helper);
-    suspensionHelpers.push(helper);
+    const h = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    scene.add(h); suspHelpers.push(h);
 }
 
 // =============================================
-// 十三、游戏主循环
+// 十七、游戏主循环
 // =============================================
-
 const clock = new THREE.Clock();
-let physSteps = 0;
+
+function resetVehicle() {
+    chassisBody.position.set(PS.cx, VC.wheelRadius + VC.suspensionRestLength + 0.35, 6);
+    chassisBody.quaternion.set(0, 0, 0, 1);
+    chassisBody.velocity.set(0, 0, 0);
+    chassisBody.angularVelocity.set(0, 0, 0);
+    for (let i = 0; i < 4; i++) {
+        vehicle.setBrake(0, i);
+        vehicle.applyEngineForce(0, i);
+        vehicle.setSteeringValue(0, i);
+    }
+    currentGear = 'D'; updateGearUI();
+    parkingSuccess = false;
+    successOverlay.classList.remove('visible');
+    psResult.textContent = '--'; psResult.className = 'value';
+}
 
 function animate() {
     requestAnimationFrame(animate);
-
     const dt = Math.min(clock.getDelta(), 0.05);
 
-    // ---- 更新方向盘 UI ----
+    // 重置车辆
+    if (shouldReset) { shouldReset = false; resetVehicle(); }
+
+    // 更新方向盘
     steeringWheel.update(dt);
     steeringWheel.draw();
 
-    // ---- 获取转向输入 ----
-    // 优先使用方向盘拖拽输入，键盘 A/D 作为备选
-    let steerInput = steeringWheel.getSteerNormalized();  // 范围 [-1, 1]
+    // ---- 转向输入 ----
+    let steerInput = steeringWheel.getSteer();
+    if (keys.has('a')) steerInput = 1;
+    if (keys.has('d') && !keys.has('r')) steerInput = -1;
+    // 注意：D键既用于转向也用于切换档位，转向只在按住时生效
+    // 用单独的 left/right 方向键或直接用方向盘更合理，这里保留 A/D 转向兼容
+    const steerValue = steerInput * VC.maxSteerAngle;
 
-    // 如果键盘 A/D 按下，覆盖方向盘输入
-    if (keys.has('a')) steerInput = 1;     // 左满舵
-    if (keys.has('d')) steerInput = -1;    // 右满舵
-
-    // 将归一化转向值映射到物理转向角（弧度）
-    const steerValue = steerInput * VEHICLE_CFG.maxSteerAngle;
-
-    // ---- 引擎力 ----
+    // ---- 引擎力（受档位影响）----
     let engineForce = 0;
-    if (keys.has('w')) engineForce = VEHICLE_CFG.engineForce;
-    if (keys.has('s')) engineForce = -VEHICLE_CFG.engineForce * 0.5;
-
-    // ---- 应用力到物理车轮 ----
-    driveIndex.forEach(i => vehicle.applyEngineForce(engineForce, i));
-    steerIndex.forEach(i => vehicle.setSteeringValue(steerValue, i));
-
-    // 手刹
-    for (let i = 0; i < 4; i++) {
-        vehicle.setBrake(isBraking ? VEHICLE_CFG.brakeForce : 0, i);
+    if (keys.has('w')) {
+        // D 档：W = 前进正力; R 档：W = 倒车（反向力）
+        engineForce = currentGear === 'D' ? VC.engineForce : -VC.engineForce * 0.5;
+    }
+    if (keys.has('s')) {
+        // D 档：S = 倒车/刹车; R 档：S = 前进
+        engineForce = currentGear === 'D' ? -VC.engineForce * 0.5 : VC.engineForce;
     }
 
-    // ---- 物理世界步进 ----
-    world.step(1 / 60, dt, 3);
-    physSteps++;
+    // 应用力
+    driveIdx.forEach(i => vehicle.applyEngineForce(engineForce, i));
+    steerIdx.forEach(i => vehicle.setSteeringValue(steerValue, i));
 
-    // ---- 同步 Three.js 视觉模型与物理刚体 ----
+    // 手刹
+    for (let i = 0; i < 4; i++) vehicle.setBrake(isBraking ? VC.brakeForce : 0, i);
+
+    // 物理步进
+    world.step(1 / 60, dt, 3);
+
+    // 同步视觉模型
     carGroup.position.copy(chassisBody.position);
     carGroup.quaternion.copy(chassisBody.quaternion);
 
@@ -741,53 +723,59 @@ function animate() {
         const t = vehicle.wheelInfos[i].worldTransform;
         wheelMeshes[i].position.set(t.position.x, t.position.y, t.position.z);
         wheelMeshes[i].quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
-
         // 悬挂辅助线
         const info = vehicle.wheelInfos[i];
-        const localConn = new THREE.Vector3().copy(info.chassisConnectionPointLocal);
-        localConn.applyQuaternion(new THREE.Quaternion(
-            chassisBody.quaternion.x, chassisBody.quaternion.y,
-            chassisBody.quaternion.z, chassisBody.quaternion.w
-        ));
-        const worldConn = new THREE.Vector3().copy(chassisBody.position).add(localConn);
-
-        suspensionHelpers[i].position.copy(worldConn).lerp(wheelMeshes[i].position, 0.5);
-        suspensionHelpers[i].lookAt(wheelMeshes[i].position);
-        suspensionHelpers[i].rotateX(Math.PI / 2);
-        suspensionHelpers[i].scale.y = Math.max(worldConn.distanceTo(wheelMeshes[i].position), 0.01);
+        const lc = new THREE.Vector3().copy(info.chassisConnectionPointLocal);
+        lc.applyQuaternion(new THREE.Quaternion(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w));
+        const wc = new THREE.Vector3().copy(chassisBody.position).add(lc);
+        suspHelpers[i].position.copy(wc).lerp(wheelMeshes[i].position, 0.5);
+        suspHelpers[i].lookAt(wheelMeshes[i].position);
+        suspHelpers[i].rotateX(Math.PI / 2);
+        suspHelpers[i].scale.y = Math.max(wc.distanceTo(wheelMeshes[i].position), 0.01);
     }
 
-    // ---- 相机跟随 ----
-    const bodyPos = chassisBody.position;
-    const bodyQuat = chassisBody.quaternion;
+    // 碰撞反馈衰减
+    if (collisionTimer > 0) {
+        collisionTimer -= dt;
+        collisionFlash.classList.add('active');
+        collisionText.classList.add('visible');
+        if (collisionTimer <= 0) {
+            collisionFlash.classList.remove('active');
+            collisionText.classList.remove('visible');
+        }
+    }
 
-    const idealOffset = new THREE.Vector3(0, camTarget.height, -camTarget.distance);
-    idealOffset.applyQuaternion(new THREE.Quaternion(bodyQuat.x, bodyQuat.y, bodyQuat.z, bodyQuat.w));
-    idealOffset.add(new THREE.Vector3(bodyPos.x, bodyPos.y, bodyPos.z));
+    // 入库判定
+    checkParking();
 
-    const idealLookAt = new THREE.Vector3(bodyPos.x, bodyPos.y + 1.5, bodyPos.z);
+    // 成功倒计时
+    if (successTimer > 0) {
+        successTimer -= dt;
+        if (successTimer <= 0) successOverlay.classList.remove('visible');
+    }
 
-    camTarget.currentPos.lerp(idealOffset, 0.08);
-    camTarget.currentLookAt.lerp(idealLookAt, 0.08);
-
+    // 相机跟随
+    const bP = chassisBody.position, bQ = chassisBody.quaternion;
+    const iOff = new THREE.Vector3(0, camTarget.height, -camTarget.distance);
+    iOff.applyQuaternion(new THREE.Quaternion(bQ.x, bQ.y, bQ.z, bQ.w));
+    iOff.add(new THREE.Vector3(bP.x, bP.y, bP.z));
+    const iLA = new THREE.Vector3(bP.x, bP.y + 1.5, bP.z);
+    camTarget.currentPos.lerp(iOff, 0.08);
+    camTarget.currentLookAt.lerp(iLA, 0.08);
     camera.position.copy(camTarget.currentPos);
     camera.lookAt(camTarget.currentLookAt);
 
-    if (keys.has('pageup'))  camTarget.distance = THREE.MathUtils.clamp(camTarget.distance - 5 * dt, camTarget.minDistance, camTarget.maxDistance);
+    if (keys.has('pageup')) camTarget.distance = THREE.MathUtils.clamp(camTarget.distance - 5 * dt, camTarget.minDistance, camTarget.maxDistance);
     if (keys.has('pagedown')) camTarget.distance = THREE.MathUtils.clamp(camTarget.distance + 5 * dt, camTarget.minDistance, camTarget.maxDistance);
 
-    // ---- HUD 更新 ----
-    const vel = chassisBody.velocity;
-    const speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
-    document.getElementById('speed').textContent = Math.round(speed * 3.6) + ' km/h';
-
-    const pos = chassisBody.position;
-    document.getElementById('physics-info').textContent =
-        `pos: ${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)} | steer: ${steerInput.toFixed(2)}`;
+    // HUD
+    const v = chassisBody.velocity;
+    document.getElementById('speed').textContent = Math.round(Math.sqrt(v.x*v.x + v.z*v.z) * 3.6) + ' km/h';
+    const p = chassisBody.position;
+    document.getElementById('physics-info').textContent = `pos: ${p.x.toFixed(1)}, ${p.z.toFixed(1)} | gear: ${currentGear}`;
 
     renderer.render(scene, camera);
 }
-
 animate();
 </script>
 </body>
