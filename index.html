@@ -84,10 +84,11 @@
         .touch-btn.rst{border-color:rgba(0,150,255,.5);color:#0af;font-size:12px}
 
         /* ---- 方向盘 Canvas ---- */
+        #sw-wrap{position:fixed;bottom:20px;left:20px;z-index:15;pointer-events:auto}
         #sw-canvas{display:block;margin:0 auto;border-radius:50%;touch-action:none}
-
         @media(pointer:coarse),(max-width:900px){
             #touch-zone{display:block}
+            #sw-wrap{display:none}
             #hud-bottom{display:none}
             #diag{display:none}
         }
@@ -176,10 +177,13 @@
     </div>
 </div>
 
+<!-- 桌面端方向盘 -->
+<div id="sw-wrap"><canvas id="sw-canvas" width="150" height="150"></canvas></div>
+
 <!-- 移动端触控区域 -->
 <div id="touch-zone">
     <div class="touch-panel touch-panel-left">
-        <canvas id="sw-canvas" width="150" height="150"></canvas>
+        <canvas id="sw-canvas-m" width="150" height="150"></canvas>
     </div>
     <div class="touch-panel touch-panel-right">
         <div class="touch-btn gas" id="t-gas">W</div>
@@ -484,6 +488,7 @@ let touchGas = false, touchBrk = false;
 
 window.addEventListener('keydown', e => {
     keys.add(e.key.toLowerCase());
+    if(['arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault();
     if(e.key===' '){ isBraking=true; e.preventDefault(); }
     if(e.key.toLowerCase()==='r' && !e.repeat){
         const v=chassisBody.velocity;
@@ -573,7 +578,8 @@ class SteeringWheel {
         ctx.restore();ctx.restore();
     }
 }
-const sw = isMobile ? new SteeringWheel('sw-canvas', 270) : null;
+const swCanvasId = isMobile ? 'sw-canvas-m' : 'sw-canvas';
+const sw = new SteeringWheel(swCanvasId, 270);
 
 // =========================================================
 // 十二、调试面板
@@ -742,15 +748,15 @@ function animate(){
     // 转向
     const tuning = getTuning();
     let steerN = sw ? sw.norm() : 0;
-    if(keys.has('a')) steerN = 1;
-    if(keys.has('d')) steerN = -1;
+    if(keys.has('a') || keys.has('arrowleft')) steerN = 1;
+    if(keys.has('d') || keys.has('arrowright')) steerN = -1;
     steerN = THREE.MathUtils.clamp(steerN * tuning.steerMul, -1, 1);
     const steerV = steerN * tuning.maxSteer;
 
     // 油门/刹车
     let engF = 0;
-    const gForward = (keys.has('w') || touchGas);
-    const gBrake = (keys.has('s') || touchBrk);
+    const gForward = (keys.has('w') || keys.has('arrowup') || touchGas);
+    const gBrake = (keys.has('s') || keys.has('arrowdown') || touchBrk);
     if(gForward) engF = gear==='D' ? tuning.engineF : -tuning.engineF*0.5;
     if(gBrake) engF = gear==='D' ? -tuning.engineF*0.5 : tuning.engineF;
 
