@@ -99,7 +99,8 @@
 <div id="cflash"></div>
 <div id="diag">loading...</div>
 <div id="cam-hint">按 C 切换驾驶员视角</div>
-<div id="level-menu">
+<div id="menu-toggle" onclick="document.getElementById('level-menu').classList.toggle('hidden')" style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(0,0,0,.6);color:#ff0;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:Consolas,monospace">📋 科目选择 (M)</div>
+<div id="level-menu" class="hidden">
     <div class="menu-box">
         <h2>科目二模拟器</h2>
         <div class="sub">选择考试项目和关卡</div>
@@ -461,10 +462,8 @@ const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.55,2.0),bodyMat);
 cabin.position.set(0,0.65,-0.1); cabin.castShadow=true; carG.add(cabin);
 const roof=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.06,1.6),bodyMat);
 roof.position.set(0,0.95,-0.1); roof.castShadow=true; carG.add(roof);
-carG.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(1.5,0.52,0.05),glassMat),{position:new THREE.Vector3(0,0.72,0.88)}));
-carG.children[carG.children.length-1].rotation.x=-0.25;
-const fGlass2=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.52,0.05),glassMat);
-fGlass2.position.set(0,0.72,0.88); fGlass2.rotation.x=-0.25; carG.add(fGlass2);
+const fGlass0=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.52,0.05),glassMat);
+fGlass0.position.set(0,0.72,0.88); fGlass0.rotation.x=-0.25; carG.add(fGlass0);
 const rGlass=new THREE.Mesh(new THREE.BoxGeometry(1.45,0.45,0.05),glassMat);
 rGlass.position.set(0,0.7,-1.05); rGlass.rotation.x=0.2; carG.add(rGlass);
 const lsGlass=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.38,1.5),glassMat);
@@ -634,6 +633,11 @@ class SteeringWheel {
 }
 const swCanvasId=isMobile?'sw-canvas-m':'sw-canvas';
 const sw=new SteeringWheel(swCanvasId,270);
+
+function getTuning(){
+  return {steerMul:1,engineF:600,brakeF:50,maxSteer:0.6};
+}
+
 // ============ Camera ============
 let camMode='follow';
 const cam={dist:14,minD:5,maxD:28,h:6,curPos:new THREE.Vector3(0,8,-14),curLook:new THREE.Vector3(0,1,0)};
