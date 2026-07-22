@@ -32,6 +32,40 @@
         /* ---- 右侧诊断 ---- */
         #diag{position:absolute;bottom:16px;right:16px;pointer-events:none;color:#fa0;font-size:11px;background:rgba(0,0,0,.5);padding:6px 10px;border-radius:6px;line-height:1.6}
 
+        /* ---- 调试面板 ---- */
+        #debug-panel{
+            position:absolute;top:16px;left:50%;transform:translateX(-50%);
+            pointer-events:auto;color:#0f0;font-family:'Consolas',monospace;
+            font-size:12px;background:rgba(0,0,0,.75);padding:12px 16px;
+            border-radius:8px;border:1px solid rgba(0,255,0,.3);
+            min-width:320px;z-index:40;display:none;
+            backdrop-filter:blur(4px);
+        }
+        #debug-panel.visible{display:block}
+        #debug-panel h3{color:#0f0;font-size:13px;margin:0 0 8px 0;border-bottom:1px solid rgba(0,255,0,.2);padding-bottom:4px}
+        #debug-panel .row{display:flex;justify-content:space-between;margin:2px 0;line-height:1.6}
+        #debug-panel .lbl{color:#888}
+        #debug-panel .val{color:#0f0;font-weight:bold;text-align:right}
+        #debug-panel .val.warn{color:#fa0}
+        #debug-panel .val.err{color:#f44}
+        #debug-panel .section{margin-top:8px;border-top:1px solid rgba(0,255,0,.15);padding-top:6px}
+        #debug-panel .section h4{color:#0ff;font-size:11px;margin:0 0 4px 0}
+        #debug-panel input[type=range]{
+            width:100%;height:4px;-webkit-appearance:none;appearance:none;
+            background:rgba(255,255,255,.15);border-radius:2px;outline:none;margin:4px 0;
+        }
+        #debug-panel input[type=range]::-webkit-slider-thumb{
+            -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+            background:#0f0;cursor:pointer;border:none;
+        }
+        #debug-panel input[type=range]::-moz-range-thumb{
+            width:14px;height:14px;border-radius:50%;background:#0f0;cursor:pointer;border:none;
+        }
+        #debug-panel .slider-row{display:flex;align-items:center;gap:8px;margin:3px 0}
+        #debug-panel .slider-lbl{color:#aaa;font-size:11px;min-width:80px}
+        #debug-panel .slider-val{color:#0f0;font-size:11px;min-width:50px;text-align:right}
+        #debug-toggle-hint{position:absolute;top:4px;right:8px;color:#555;font-size:10px;pointer-events:none}
+
         /* ---- 碰撞闪屏 ---- */
         #cflash{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,0,0,0);pointer-events:none;z-index:5;transition:background .05s}
         #cflash.on{background:rgba(255,0,0,.15)}
@@ -87,6 +121,60 @@
 
 <!-- 诊断信息 -->
 <div id="diag">loading...</div>
+
+<!-- 调试面板 -->
+<div id="debug-panel">
+    <span id="debug-toggle-hint">F3 切换</span>
+    <h3>&#x1F527; 调试面板</h3>
+    <div class="section">
+        <div class="row"><span class="lbl">坐标 X</span><span class="val" id="dbg-x">0.00</span></div>
+        <div class="row"><span class="lbl">坐标 Y</span><span class="val" id="dbg-y">0.00</span></div>
+        <div class="row"><span class="lbl">坐标 Z</span><span class="val" id="dbg-z">0.00</span></div>
+        <div class="row"><span class="lbl">水平速度</span><span class="val" id="dbg-spd">0.0 km/h</span></div>
+        <div class="row"><span class="lbl">方向盘角度</span><span class="val" id="dbg-sw">0.0 deg</span></div>
+        <div class="row"><span class="lbl">前轮转向角</span><span class="val" id="dbg-st">0.00 rad</span></div>
+        <div class="row"><span class="lbl">引擎力</span><span class="val" id="dbg-eng">0 N</span></div>
+        <div class="row"><span class="lbl">档位</span><span class="val" id="dbg-gear">D</span></div>
+    </div>
+    <div class="section">
+        <h4>&#x2699; 物理参数调节</h4>
+        <div class="slider-row">
+            <span class="slider-lbl">转向灵敏度</span>
+            <input type="range" id="sl-steer" min="0.1" max="2.0" step="0.05" value="1.0">
+            <span class="slider-val" id="sl-steer-v">1.00</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">引擎加速度</span>
+            <input type="range" id="sl-eng" min="100" max="1500" step="10" value="600">
+            <span class="slider-val" id="sl-eng-v">600</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">刹车力度</span>
+            <input type="range" id="sl-brk" min="5" max="150" step="5" value="50">
+            <span class="slider-val" id="sl-brk-v">50</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">最大转向角</span>
+            <input type="range" id="sl-msa" min="0.2" max="1.2" step="0.05" value="0.6">
+            <span class="slider-val" id="sl-msa-v">0.60</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">悬挂刚度</span>
+            <input type="range" id="sl-stiff" min="5" max="80" step="1" value="30">
+            <span class="slider-val" id="sl-stiff-v">30</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">悬挂阻尼</span>
+            <input type="range" id="sl-damp" min="0.5" max="6" step="0.1" value="2.3">
+            <span class="slider-val" id="sl-damp-v">2.3</span>
+        </div>
+        <div class="slider-row">
+            <span class="slider-lbl">轮胎摩擦</span>
+            <input type="range" id="sl-fric" min="0.1" max="1.5" step="0.05" value="0.5">
+            <span class="slider-val" id="sl-fric-v">0.50</span>
+        </div>
+    </div>
+</div>
 
 <!-- 移动端触控区域 -->
 <div id="touch-zone">
@@ -144,9 +232,10 @@ world.defaultContactMaterial = new CANNON.ContactMaterial(defMat, defMat, {
 });
 const gndMat = new CANNON.Material('gnd');
 const whlMat = new CANNON.Material('whl');
-world.addContactMaterial(new CANNON.ContactMaterial(whlMat, gndMat, {
+const wheelGroundContact = new CANNON.ContactMaterial(whlMat, gndMat, {
     friction: 0.5, restitution: 0.0, contactEquationStiffness: 1e8, contactEquationRelaxation: 3
-}));
+});
+world.addContactMaterial(wheelGroundContact);
 const wallMat = new CANNON.Material('wall');
 world.addContactMaterial(new CANNON.ContactMaterial(wallMat, defMat, {
     friction: 0.2, restitution: 0.4, contactEquationStiffness: 1e8, contactEquationRelaxation: 3
@@ -483,7 +572,94 @@ class SteeringWheel {
 const sw = isMobile ? new SteeringWheel('sw-canvas', 270) : null;
 
 // =========================================================
-// 十二、碰撞检测
+// 十二、调试面板
+// =========================================================
+let debugVisible = false;
+const debugPanel = document.getElementById('debug-panel');
+const dbgEls = {
+    x: document.getElementById('dbg-x'),
+    y: document.getElementById('dbg-y'),
+    z: document.getElementById('dbg-z'),
+    spd: document.getElementById('dbg-spd'),
+    sw: document.getElementById('dbg-sw'),
+    st: document.getElementById('dbg-st'),
+    eng: document.getElementById('dbg-eng'),
+    gear: document.getElementById('dbg-gear'),
+};
+
+// 物理参数滑块（实时生效）
+const sliders = {
+    steer:  { el: document.getElementById('sl-steer'),  vEl: document.getElementById('sl-steer-v'),  def: 1.0 },
+    eng:    { el: document.getElementById('sl-eng'),    vEl: document.getElementById('sl-eng-v'),    def: 600 },
+    brk:    { el: document.getElementById('sl-brk'),    vEl: document.getElementById('sl-brk-v'),    def: 50 },
+    msa:    { el: document.getElementById('sl-msa'),    vEl: document.getElementById('sl-msa-v'),    def: 0.6 },
+    stiff:  { el: document.getElementById('sl-stiff'),  vEl: document.getElementById('sl-stiff-v'),  def: 30 },
+    damp:   { el: document.getElementById('sl-damp'),   vEl: document.getElementById('sl-damp-v'),   def: 2.3 },
+    fric:   { el: document.getElementById('sl-fric'),   vEl: document.getElementById('sl-fric-v'),   def: 0.5 },
+};
+
+// 获取可调节参数（每帧覆盖 VC 字段）
+function getTuning() {
+    return {
+        steerMul:  parseFloat(sliders.steer.el.value),
+        engineF:   parseFloat(sliders.eng.el.value),
+        brakeF:    parseFloat(sliders.brk.el.value),
+        maxSteer:  parseFloat(sliders.msa.el.value),
+        stiff:     parseFloat(sliders.stiff.el.value),
+        damp:      parseFloat(sliders.damp.el.value),
+        friction:  parseFloat(sliders.fric.el.value),
+    };
+}
+
+// 更新滑块显示值 + 实时应用悬挂参数
+Object.values(sliders).forEach(s => {
+    if (!s.el || !s.vEl) return;
+    s.vEl.textContent = s.el.value;
+    s.el.addEventListener('input', () => {
+        s.vEl.textContent = parseFloat(s.el.value).toFixed(s.el.step.includes('.') ? 2 : 0);
+        applySuspensionParams();
+    });
+});
+
+// 实时将滑块值写入已创建的车轮悬挂参数
+function applySuspensionParams() {
+    const t = getTuning();
+    veh.wheelInfos.forEach(w => {
+        w.suspensionStiffness = t.stiff;
+        w.dampingRelaxation = t.damp;
+    });
+    // 更新轮胎摩擦材质
+    wheelGroundContact.friction = t.friction;
+}
+
+function updateDebugPanel(steerN, steerV, engF) {
+    if (!debugVisible) return;
+    const p = chassisBody.position;
+    const vel = chassisBody.velocity;
+    const spd = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+    dbgEls.x.textContent = p.x.toFixed(3);
+    dbgEls.y.textContent = p.y.toFixed(3);
+    dbgEls.z.textContent = p.z.toFixed(3);
+    dbgEls.spd.textContent = (spd * 3.6).toFixed(1) + ' km/h';
+    dbgEls.spd.className = spd * 3.6 > 40 ? 'val warn' : 'val';
+    dbgEls.sw.textContent = (sw ? sw.ang : 0).toFixed(1) + ' deg';
+    dbgEls.st.textContent = steerV.toFixed(3) + ' rad';
+    dbgEls.eng.textContent = engF.toFixed(0) + ' N';
+    dbgEls.eng.className = engF > 0 ? 'val' : engF < 0 ? 'val err' : 'val';
+    dbgEls.gear.textContent = gear;
+}
+
+// F3 键切换调试面板
+window.addEventListener('keydown', e => {
+    if (e.key === 'F3') {
+        e.preventDefault();
+        debugVisible = !debugVisible;
+        debugPanel.classList.toggle('visible', debugVisible);
+    }
+});
+
+// =========================================================
+// 十三、碰撞检测
 // =========================================================
 chassisBody.addEventListener('collide', e => {
     if(e.body.userData && e.body.userData.type === 'parking_wall') collisionTimer = 1.2;
@@ -560,21 +736,23 @@ function animate(){
     if(wantReset){ wantReset=false; resetCar(); }
 
     // 转向
+    const tuning = getTuning();
     let steerN = sw ? sw.norm() : 0;
     if(keys.has('a')) steerN = 1;
     if(keys.has('d')) steerN = -1;
-    const steerV = steerN * VC.maxSteer;
+    steerN = THREE.MathUtils.clamp(steerN * tuning.steerMul, -1, 1);
+    const steerV = steerN * tuning.maxSteer;
 
     // 油门/刹车
     let engF = 0;
     const gForward = (keys.has('w') || touchGas);
     const gBrake = (keys.has('s') || touchBrk);
-    if(gForward) engF = gear==='D' ? VC.engineF : -VC.engineF*0.5;
-    if(gBrake) engF = gear==='D' ? -VC.engineF*0.5 : VC.engineF;
+    if(gForward) engF = gear==='D' ? tuning.engineF : -tuning.engineF*0.5;
+    if(gBrake) engF = gear==='D' ? -tuning.engineF*0.5 : tuning.engineF;
 
     dI.forEach(i => veh.applyEngineForce(engF, i));
     sI.forEach(i => veh.setSteeringValue(steerV, i));
-    for(let i=0;i<4;i++) veh.setBrake(isBraking ? VC.brakeF : 0, i);
+    for(let i=0;i<4;i++) veh.setBrake(isBraking ? tuning.brakeF : 0, i);
 
     // 物理
     world.step(1/60, dt, 3);
@@ -634,6 +812,9 @@ function animate(){
     const pp=chassisBody.position;
     document.getElementById('diag').textContent=
         `pos: ${pp.x.toFixed(1)}, ${pp.z.toFixed(1)} | gear: ${gear} | steer: ${steerN.toFixed(2)}`;
+
+    // 调试面板
+    updateDebugPanel(steerN, steerV, engF);
 
     renderer.render(scene, camera);
 }
