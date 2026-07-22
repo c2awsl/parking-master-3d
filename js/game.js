@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { scene, camera, renderer } from './scene.js';
 import { world } from './physics.js';
-import { chassisBody, veh, VC, syncCarVisuals, setCarVisible } from './vehicle.js';
+import { chassisBody, CHASSIS_Y, syncCarVisuals } from './vehicle.js';
 import { loadLevel, clearTrack, LEVELS } from './levels.js';
 import { updateCamera, toggleDriverMode } from './camera.js';
 import { isForward, isBackward, isLeft, isRight, isBrake, isReset, isCamera, initSteeringWheel, getSteerAngle, initTouchButtons } from './input.js';
 import { setStatus, setGear, setSpeed, flashRed, buildTabs, getCurrentTab, getCurrentSubIdx } from './ui.js';
+import { initMiniViews, renderMiniViews } from './miniviews.js';
 
-// Make THREE and CANNON available for levels.js dynamic use
 import * as CANNON from 'cannon-es';
 window.THREE = THREE;
 window.CANNON = CANNON;
@@ -19,22 +19,24 @@ let lastTime = performance.now();
 let lastContactTime = 0;
 let checkTimer = 0;
 let stateTimer = 0;
-let gameState = 'running'; // running | pass | fail
+let gameState = 'running';
 let lastReset = 0;
+
+const ACCEL = 10;
+const MAX_SPEED = 12;
+const BRAKE_DECEL = 20;
+const NATURAL_DECEL = 0.99;
+const IDLE_STOP = 0.05;
+const TURN_SPEED = 2.2;
 
 function resetCar() {
     const level = LEVELS.find(l => l.id === currentLevelId);
     const sub = level.subs[currentSubIdx % level.subs.length];
     const sp = sub.spawn;
-    chassisBody.position.set(sp.x, VC.wR + VC.sRest + 0.35, sp.z);
+    chassisBody.position.set(sp.x, CHASSIS_Y + 0.5, sp.z);
     chassisBody.quaternion.set(0, 0, 0, 1);
-    chassisBody.velocity.set(0, 0, 0);
+    chassisBody.velocity.set(0, -1, 0);
     chassisBody.angularVelocity.set(0, 0, 0);
-    for (let i = 0; i < 4; i++) {
-        veh.wheelInfos[i].engineForce = 0;
-        veh.wheelInfos[i].brake = VC.brakeF;
-        veh.wheelInfos[i].steeringValue = 0;
-    }
     gameState = 'running';
     setStatus('', '');
 }
@@ -108,7 +110,11 @@ function onTabSelect(id, idx) {
 buildTabs(onTabSelect);
 initSteeringWheel();
 initTouchButtons();
+initMiniViews();
 resetCar();
+
+const _fwd = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
 
 function animate() {
     requestAnimationFrame(animate);
@@ -117,62 +123,75 @@ function animate() {
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
-    // Camera toggle
-    if (isCamera()) {
-        toggleDriverMode();
-    }
+    if (isCamera()) toggleDriverMode();
 
-    // Reset
     if (isReset() && now - lastReset > 500) {
         lastReset = now;
         resetCar();
     }
 
-    // Steering
-    let steer = 0;
-    if (isLeft()) steer = 1;
-    if (isRight()) steer = -1;
-    const swAngle = getSteerAngle();
-    if (Math.abs(swAngle) > 0.05) steer = -swAngle;
-    const steerTarget = steer * VC.maxSteer;
-    const steerSpeed = 2.5;
-    for (let i = 0; i < 4; i++) {
-        const curr = veh.wheelInfos[i].steeringValue;
-        let next = curr + Math.sign(steerTarget - curr) * Math.min(Math.abs(steerTarget - curr), steerSpeed * dt);
-        if (Math.abs(next) < 0.01 && steerTarget === 0) next = 0;
-        veh.wheelInfos[i].steeringValue = next;
+    _quat.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
+    _fwd.set(0, 0, 1).applyQuaternion(_quat);
+
+    const vx = chassisBody.velocity.x;
+    const vz = chassisBody.velocity.z;
+    const spd = Math.sqrt(vx * vx + vz * vz);
+
+    if (isForward()) {
+        chassisBody.velocity.x += _fwd.x * ACCEL * dt;
+        chassisBody.velocity.z += _fwd.z * ACCEL * dt;
+    } else if (isBackward()) {
+        chassisBody.velocity.x -= _fwd.x * ACCEL * 0.6 * dt;
+        chassisBody.velocity.z -= _fwd.z * ACCEL * 0.6 * dt;
+    } else {
+        if (spd > IDLE_STOP) {
+            chassisBody.velocity.x *= NATURAL_DECEL;
+            chassisBody.velocity.z *= NATURAL_DECEL;
+        } else if (spd > 0) {
+            chassisBody.velocity.x = 0;
+            chassisBody.velocity.z = 0;
+        }
     }
 
-    // Engine / brake
-    let engineForce = 0;
-    let brakeForce = 0;
-    if (isForward()) engineForce = VC.engineF;
-    if (isBackward()) engineForce = -VC.engineF * 0.6;
-    if (isBrake()) brakeForce = VC.brakeF * 2;
-
-    for (let i = 0; i < 4; i++) {
-        veh.wheelInfos[i].engineForce = engineForce;
-        veh.wheelInfos[i].brake = brakeForce;
+    if (isBrake() && spd > 0.05) {
+        const factor = Math.max(0, 1 - BRAKE_DECEL * dt / spd);
+        chassisBody.velocity.x *= factor;
+        chassisBody.velocity.z *= factor;
     }
 
-    // Speed
+    const newSpd = Math.sqrt(chassisBody.velocity.x ** 2 + chassisBody.velocity.z ** 2);
+    if (newSpd > MAX_SPEED) {
+        const scale = MAX_SPEED / newSpd;
+        chassisBody.velocity.x *= scale;
+        chassisBody.velocity.z *= scale;
+    }
+
     speed = Math.sqrt(
         chassisBody.velocity.x ** 2 +
         chassisBody.velocity.y ** 2 +
         chassisBody.velocity.z ** 2
     );
-    if (engineForce === 0 && brakeForce === 0 && speed < 0.1) {
-        chassisBody.velocity.x *= 0.95;
-        chassisBody.velocity.z *= 0.95;
+
+    let steerInput = 0;
+    if (isLeft()) steerInput = 1;
+    if (isRight()) steerInput = -1;
+    const swAngle = getSteerAngle();
+    if (Math.abs(swAngle) > 0.05) steerInput = -swAngle;
+
+    if (spd > 0.5) {
+        chassisBody.angularVelocity.y = steerInput * TURN_SPEED;
+    } else {
+        chassisBody.angularVelocity.y *= 0.8;
     }
 
-    setSpeed(speed);
-    setGear(engineForce < 0 ? 'R' : 'D');
+    chassisBody.angularVelocity.x = 0;
+    chassisBody.angularVelocity.z = 0;
 
-    // Collision flash
+    setSpeed(spd);
+    setGear(isBackward() ? 'R' : (isForward() ? 'D' : 'P'));
+
     if (now - lastContactTime > 200) flashRed(false);
 
-    // Check
     checkTimer += dt;
     if (gameState === 'running' && checkTimer > 0.3) {
         checkTimer = 0;
@@ -184,13 +203,11 @@ function animate() {
         }
     }
 
-    // State timer
     if (gameState !== 'running') {
         stateTimer -= dt;
         if (stateTimer <= 0) {
             setStatus('', '');
             if (gameState === 'pass') {
-                // Auto advance to next sub level
                 const level = LEVELS.find(l => l.id === currentLevelId);
                 const nextIdx = (currentSubIdx + 1) % level.subs.length;
                 loadLevelAndReset(currentLevelId, nextIdx);
@@ -198,19 +215,33 @@ function animate() {
         }
     }
 
-    // Physics
     world.step(1 / 60, dt, 3);
 
-    // Visuals
+    // Lock pitch and roll - only keep Y rotation
+    const yAngle = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w),
+        'YXZ'
+    ).y;
+    const yQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yAngle);
+    chassisBody.quaternion.set(yQuat.x, yQuat.y, yQuat.z, yQuat.w);
+    chassisBody.angularVelocity.x = 0;
+    chassisBody.angularVelocity.z = 0;
+
+    // Keep car on ground
+    if (chassisBody.position.y < CHASSIS_Y) {
+        chassisBody.position.y = CHASSIS_Y;
+        if (chassisBody.velocity.y < 0) chassisBody.velocity.y = 0;
+    }
+
     syncCarVisuals();
     updateCamera(chassisBody.position, chassisBody.quaternion);
 
-    // Out of bounds
     if (chassisBody.position.y < -5 || Math.abs(chassisBody.position.x) > 60 || Math.abs(chassisBody.position.z) > 60) {
         resetCar();
     }
 
     renderer.render(scene, camera);
+    renderMiniViews();
 }
 
 animate();

@@ -27,17 +27,17 @@ canvas{display:block}
 .sub-tab:hover{background:rgba(0,0,0,.06)}
 .sub-tab.active{background:#007aff;color:#fff}
 
-#controls{position:fixed;bottom:24px;right:24px;z-index:10;display:flex;gap:8px}
+#controls{position:fixed;bottom:24px;right:220px;z-index:10;display:flex;gap:8px}
 .ctrl-btn{width:52px;height:52px;border:none;border-radius:16px;font-size:18px;font-weight:600;cursor:pointer;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.5);box-shadow:0 4px 16px rgba(0,0,0,.08);color:#1d1d1f;font-family:inherit;display:flex;align-items:center;justify-content:center;transition:all .2s}
 .ctrl-btn:active{transform:scale(.92);background:rgba(0,0,0,.08)}
 
 #cflash{position:fixed;inset:0;background:rgba(255,0,0,0);pointer-events:none;z-index:5;transition:background .05s}
 #cflash.on{background:rgba(255,0,0,.12)}
 
-#sw-wrap{position:fixed;bottom:90px;left:24px;z-index:15;pointer-events:auto;display:none}
+#sw-wrap{position:fixed;bottom:90px;left:24px;z-index:15;pointer-events:auto;display:block}
 #sw-canvas{display:block;border-radius:50%;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+
 @media(pointer:coarse),(max-width:900px){
-  #sw-wrap{display:block}
   #controls{bottom:90px;right:16px}
   #tabs{bottom:16px;gap:4px;padding:4px}
   .tab{padding:8px 12px;font-size:12px}

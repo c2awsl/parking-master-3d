@@ -1,53 +1,26 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { world, whlMat } from './physics.js';
+import { world } from './physics.js';
 import { scene } from './scene.js';
 
+export const CHASSIS_HALF_H = 0.35;
+export const CHASSIS_Y = CHASSIS_HALF_H;
+export const WHEEL_R = 0.3;
+export const CHASSIS_W = 1.0;
+export const CHASSIS_L = 2.0;
+
 export const VC = {
-    wR: 0.3, sStiff: 30, sRest: 0.2, dRelax: 2.3, dComp: 4.4,
-    maxSF: 100000, maxST: 0.5, rollI: 0.01, maxSteer: 0.6,
-    engineF: 600, brakeF: 50, mass: 150,
+    wR: WHEEL_R, maxSteer: 0.6, mass: 150,
 };
 
 export const chassisBody = new CANNON.Body({
     mass: VC.mass,
-    shape: new CANNON.Box(new CANNON.Vec3(1, 0.35, 2)),
-    position: new CANNON.Vec3(0, VC.wR + VC.sRest + 0.35, 0),
+    shape: new CANNON.Box(new CANNON.Vec3(CHASSIS_W, CHASSIS_HALF_H, CHASSIS_L)),
+    position: new CANNON.Vec3(0, CHASSIS_Y, 0),
+    linearDamping: 0.3,
+    angularDamping: 0.4,
 });
 world.addBody(chassisBody);
-
-export const veh = new CANNON.RaycastVehicle({
-    chassisBody,
-    indexRightAxis: 0,
-    indexUpAxis: 1,
-    indexForwardAxis: 2,
-});
-
-const wP = [
-    new CANNON.Vec3(-1, 0, 1.4),
-    new CANNON.Vec3(1, 0, 1.4),
-    new CANNON.Vec3(-1, 0, -1.4),
-    new CANNON.Vec3(1, 0, -1.4),
-];
-export const sI = [0, 1];
-export const dI = [2, 3];
-
-wP.forEach(p => veh.addWheel({
-    radius: VC.wR,
-    directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: VC.sStiff,
-    suspensionRestLength: VC.sRest,
-    maxSuspensionTravel: VC.maxST,
-    dampingRelaxation: VC.dRelax,
-    dampingCompression: VC.dComp,
-    maxSuspensionForce: VC.maxSF,
-    rollInfluence: VC.rollI,
-    axleLocal: new CANNON.Vec3(-1, 0, 0),
-    chassisConnectionPointLocal: p,
-    customSlidingRotationalSpeed: -30,
-    useCustomSlidingRotationalSpeed: true,
-}));
-veh.addToWorld(world);
 
 const carG = new THREE.Group();
 const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.2, metalness: 0.5 });
@@ -111,6 +84,12 @@ addBox(carG, new THREE.BoxGeometry(1.88, 0.02, 3.8), sideTrimMat, 0.94, 0.18, 0)
 scene.add(carG);
 
 const whMeshes = [];
+const wheelLocalPos = [
+    new THREE.Vector3(-0.85, -CHASSIS_HALF_H, 1.4),
+    new THREE.Vector3(0.85, -CHASSIS_HALF_H, 1.4),
+    new THREE.Vector3(-0.85, -CHASSIS_HALF_H, -1.4),
+    new THREE.Vector3(0.85, -CHASSIS_HALF_H, -1.4),
+];
 const tireMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.85 });
 const hubMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.15, metalness: 0.9 });
 for (let i = 0; i < 4; i++) {
@@ -126,13 +105,21 @@ for (let i = 0; i < 4; i++) {
     whMeshes.push(wg);
 }
 
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+
 export function syncCarVisuals() {
-    carG.position.copy(chassisBody.position);
-    carG.quaternion.copy(chassisBody.quaternion);
+    carG.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+    carG.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
+    _q.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
     for (let i = 0; i < 4; i++) {
-        const t = veh.wheelInfos[i].worldTransform;
-        whMeshes[i].position.set(t.position.x, t.position.y, t.position.z);
-        whMeshes[i].quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
+        _v.copy(wheelLocalPos[i]).applyQuaternion(_q);
+        whMeshes[i].position.set(
+            _v.x + chassisBody.position.x,
+            _v.y + chassisBody.position.y,
+            _v.z + chassisBody.position.z
+        );
+        whMeshes[i].quaternion.copy(_q);
     }
 }
 
